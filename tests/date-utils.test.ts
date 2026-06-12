@@ -1,4 +1,10 @@
-import { bucketTransactions, makeBucketNames } from '../src/date-utils';
+import {
+  bucketTransactions,
+  chooseInterval,
+  makeBucketNames,
+  makeChartLabelFormatter,
+  resolveDateRange,
+} from '../src/date-utils';
 import { EnhancedTransaction, FileBlock } from '../src/parser';
 import * as moment from 'moment';
 
@@ -9,6 +15,69 @@ const emptyBlock: FileBlock = {
   lastLine: -1,
   block: '',
 };
+
+describe('chooseInterval()', () => {
+  test('short ranges use daily resolution', () => {
+    expect(chooseInterval(moment('2021-12-01'), moment('2021-12-08'))).toEqual(
+      'day',
+    );
+    expect(chooseInterval(moment('2021-11-08'), moment('2021-12-08'))).toEqual(
+      'day',
+    );
+  });
+  test('medium ranges use weekly resolution', () => {
+    expect(chooseInterval(moment('2021-06-08'), moment('2021-12-08'))).toEqual(
+      'week',
+    );
+  });
+  test('long ranges use monthly resolution', () => {
+    expect(chooseInterval(moment('2020-12-08'), moment('2021-12-08'))).toEqual(
+      'month',
+    );
+  });
+});
+
+describe('resolveDateRange()', () => {
+  const firstTxDate = moment('2021-01-15');
+  test.each([
+    ['week', 'day'],
+    ['month', 'day'],
+    ['6months', 'week'],
+    ['year', 'month'],
+  ] as const)('%p range uses %p resolution', (range, interval) => {
+    const result = resolveDateRange(range, firstTxDate);
+    expect(result.interval).toEqual(interval);
+    expect(result.endDate.isSame(moment(), 'day')).toBeTruthy();
+  });
+  test('all time starts at the first transaction', () => {
+    const result = resolveDateRange('all', firstTxDate);
+    expect(result.startDate.isSame(firstTxDate, 'day')).toBeTruthy();
+    expect(result.endDate.isSame(moment(), 'day')).toBeTruthy();
+  });
+  test('all time with a recent first transaction uses daily resolution', () => {
+    const recentFirstTxDate = moment().subtract(3, 'days');
+    const result = resolveDateRange('all', recentFirstTxDate);
+    expect(result.interval).toEqual('day');
+  });
+});
+
+describe('makeChartLabelFormatter()', () => {
+  test('formats day buckets without skipping when there are few', () => {
+    const formatter = makeChartLabelFormatter('day', 7);
+    expect(formatter('2021-12-01', 0)).toEqual('Dec 1');
+    expect(formatter('2021-12-02', 1)).toEqual('Dec 2');
+  });
+  test('skips labels when there are many buckets', () => {
+    const formatter = makeChartLabelFormatter('day', 31);
+    expect(formatter('2021-12-01', 0)).toEqual('Dec 1');
+    expect(formatter('2021-12-02', 1)).toBeNull();
+    expect(formatter('2021-12-04', 3)).toEqual('Dec 4');
+  });
+  test('formats month buckets with the year', () => {
+    const formatter = makeChartLabelFormatter('month', 12);
+    expect(formatter('2021-12-01', 0)).toEqual('Dec 2021');
+  });
+});
 
 describe('makeBucketNames()', () => {
   describe('week', () => {

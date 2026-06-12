@@ -162,7 +162,7 @@ const ExpenseLine: React.FC<{
       case 'expense':
         return i !== lastI ? 'Expense' : 'Asset';
       case 'income':
-        return i !== lastI ? 'Asset' : 'Expense';
+        return i !== lastI ? 'Asset' : 'Income';
       case 'transfer':
         return i !== lastI ? 'To' : 'From';
     }
@@ -174,19 +174,25 @@ const ExpenseLine: React.FC<{
     props.txCache.liabilityAccounts,
   );
 
+  // If no accounts could be categorized (e.g. account types are not declared
+  // in the ledger file and the account prefixes in the plugin settings do not
+  // match), fall back to suggesting all accounts rather than none.
+  const orAllAccounts = (accounts: string[]): string[] =>
+    accounts.length > 0 ? accounts : props.txCache.accounts;
+
   const getSuggestions = (): string[] => {
     const lastI = lines.length - 1;
     switch (formik.values.txType) {
       case 'expense':
-        return i !== lastI
-          ? props.txCache.expenseAccounts
-          : assetsAndLiabilities;
+        return orAllAccounts(
+          i !== lastI ? props.txCache.expenseAccounts : assetsAndLiabilities,
+        );
       case 'income':
-        return i !== lastI
-          ? assetsAndLiabilities
-          : props.txCache.expenseAccounts;
+        return orAllAccounts(
+          i !== lastI ? assetsAndLiabilities : props.txCache.incomeAccounts,
+        );
       case 'transfer':
-        return assetsAndLiabilities;
+        return orAllAccounts(assetsAndLiabilities);
     }
     return props.txCache.accounts;
   };

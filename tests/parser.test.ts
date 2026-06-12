@@ -5,6 +5,7 @@ import {
   FileBlock,
   fillMissingAmount,
   parse,
+  parseAccountTypeTag,
   splitIntoBlocks,
   TransactionWithBlock,
 } from '../src/parser';
@@ -771,6 +772,121 @@ alias b=Assets:Banking
       expect(txCache.expenseAccounts).toEqual(['Expenses']);
       expect(txCache.liabilityAccounts).toEqual([]);
       expect(txCache.incomeAccounts).toEqual([]);
+    });
+  });
+  describe('account directives are parsed correctly', () => {
+    test('declared accounts are added to the account list', () => {
+      const contents = `account Assets:Banking:CreditUnion
+account Expenses:Food ; type: X
+
+2021/04/20 Obsidian
+      Expenses:Spending Money    $20.00
+      Assets:Banking:CreditUnion`;
+      const txCache = parse(contents, settings);
+      expect(txCache.parsingErrors).toEqual([]);
+      expect(txCache.rawAccountDeclarations).toHaveLength(2);
+      expect(txCache.rawAccountDeclarations[0]?.value).toEqual({
+        account: 'Assets:Banking:CreditUnion',
+        comment: undefined,
+      });
+      expect(txCache.rawAccountDeclarations[1]?.value).toEqual({
+        account: 'Expenses:Food',
+        comment: 'type: X',
+      });
+      expect(txCache.accounts).toEqual([
+        'Assets:Banking:CreditUnion',
+        'Expenses:Food',
+        'Expenses:Spending Money',
+      ]);
+    });
+    test('account names may contain non-ascii characters and spaces', () => {
+      const contents = `account Ausgaben:Lebensmittel&Drogerie
+account Ausgaben:Wohnen:Miete und Nebenkosten   ; comment`;
+      const txCache = parse(contents, settings);
+      expect(txCache.parsingErrors).toEqual([]);
+      expect(txCache.accounts).toEqual([
+        'Ausgaben:Lebensmittel&Drogerie',
+        'Ausgaben:Wohnen:Miete und Nebenkosten',
+      ]);
+    });
+    test('declared types categorize accounts and are inherited by subaccounts', () => {
+      const contents = `account Vermögen:Bank   ; type: C
+account Vermögen:Bank:Wise
+account Vermögen:Bargeld    ; type: C
+account Verbindlichkeiten   ; type: L
+account Verbindlichkeiten:Eltern
+account Eigenkapital    ; type: E
+account Einnahmen   ; type: R
+account Einnahmen:Gehalt
+account Ausgaben    ; type: X
+account Ausgaben:Urlaub
+
+2025/08/22 Edeka
+    Ausgaben:Lebensmittel&Drogerie    €2.79
+    Vermögen:Bank:Sparkasse`;
+      const txCache = parse(contents, settings);
+      expect(txCache.parsingErrors).toEqual([]);
+      expect(txCache.assetAccounts).toEqual([
+        'Vermögen:Bank',
+        'Vermögen:Bank:Sparkasse',
+        'Vermögen:Bank:Wise',
+        'Vermögen:Bargeld',
+      ]);
+      expect(txCache.liabilityAccounts).toEqual([
+        'Verbindlichkeiten',
+        'Verbindlichkeiten:Eltern',
+      ]);
+      expect(txCache.incomeAccounts).toEqual([
+        'Einnahmen',
+        'Einnahmen:Gehalt',
+      ]);
+      expect(txCache.expenseAccounts).toEqual([
+        'Ausgaben',
+        'Ausgaben:Lebensmittel&Drogerie',
+        'Ausgaben:Urlaub',
+      ]);
+    });
+    test('declared types take precedence over settings prefixes', () => {
+      const contents = `account Expenses:Side Hustle ; type: R
+
+2021/04/20 Client
+    Assets:Banking    $100.00
+    Expenses:Side Hustle`;
+      const txCache = parse(contents, settings);
+      expect(txCache.parsingErrors).toEqual([]);
+      expect(txCache.incomeAccounts).toEqual(['Expenses:Side Hustle']);
+      expect(txCache.expenseAccounts).toEqual([]);
+    });
+    test('other directives are ignored without errors', () => {
+      const contents = `commodity 1000.00€
+decimal-mark .
+include other.ledger
+P 2024-01-01 € $1.10
+D $1000.00
+
+2021/04/20 Obsidian
+      Expenses:Spending Money    $20.00
+      Assets:Banking:CreditUnion`;
+      const txCache = parse(contents, settings);
+      expect(txCache.parsingErrors).toEqual([]);
+      expect(txCache.transactions).toHaveLength(1);
+    });
+  });
+  describe('parseAccountTypeTag()', () => {
+    test.each([
+      ['type: A', 'asset'],
+      ['type: C', 'asset'],
+      ['type:L', 'liability'],
+      ['type: E', 'equity'],
+      ['type: V', 'equity'],
+      ['type: R', 'income'],
+      ['type: x', 'expense'],
+      ['some comment, type: Liability', 'liability'],
+      ['comment without tag', undefined],
+      ['A', undefined],
+      [undefined, undefined],
+    ])('comment %p produces account type %p', (comment, expected) => {
+      expect(parseAccountTypeTag(comment)).toEqual(expected);
     });
   });
   describe('multiple elements in a block are parsed correctly', () => {

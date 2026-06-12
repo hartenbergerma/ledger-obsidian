@@ -4,6 +4,12 @@
 # Transactions
 # - Balance assertions (https://www.ledger-cli.org/3.0/doc/ledger3.html#Balance-assertions)
 #   - parsed but ignored in output
+# Command Directives
+# - `account` declarations (https://hledger.org/hledger.html#account) are
+#   parsed, including a `type:` tag in a same-line comment. Subdirectives on
+#   the following lines are not supported.
+# - commodity, decimal-mark, include, payee, tag, year, apply, end, D and P
+#   directives are recognized but ignored.
 ### Not supported ###
 #
 # Transactions:
@@ -12,9 +18,6 @@
 # - Expression amounts (https://www.ledger-cli.org/3.0/doc/ledger3.html#Expression-amounts)
 # - Balance assignments (https://www.ledger-cli.org/3.0/doc/ledger3.html#Balance-assignments)
 # - Commodities (https://www.ledger-cli.org/3.0/doc/ledger3.html#Commodity-prices)
-#
-# Command Directives: (https://www.ledger-cli.org/3.0/doc/ledger3.html#Command-Directives)
-# - All except the `alias` command
 
 # TODO: Currently a blank line is required between transaction entries.
 
@@ -26,6 +29,8 @@
       main: {
         date: { match: /[0-9]{4}[-\/][0-9]{2}[-\/][0-9]{2}/, next: 'txStart' },
         alias: { match: 'alias', next: 'alias' },
+        accountDirective: { match: /account[ \t]+/, next: 'accountDir' },
+        directive: { match: /(?:decimal-mark|commodity|include|payee|tag|year|apply|end|[DP])(?:[ \t][^\n]*)?/ },
         comment: { match: /[;#|][^\n]+/, value: (s:string) => s.slice(1).trim() },
         newline: { match: '\n', lineBreaks: true },
       },
@@ -49,8 +54,13 @@
         account: { match: /[^$£₤€₳₿₹¥￥₩Р₱₽₴₫;#|\n\-]+/, value: (s:string) => s.trim() },
       },
       alias: {
-        account: { match: /[a-zA-Z0-9: ]+/, value: (s:string) => s.trim() },
+        account: { match: /[^=;#|\n]+/, value: (s:string) => s.trim() },
         equal: '=',
+        newline: { match: '\n', lineBreaks: true, next: 'main' },
+      },
+      accountDir: {
+        account: { match: /[^;#|\n]+/, value: (s:string) => s.trim() },
+        comment: { match: /[;#|][^\n]*/, value: (s:string) => s.slice(1).trim() },
         newline: { match: '\n', lineBreaks: true, next: 'main' },
       },
     });
@@ -66,6 +76,19 @@ element ->
     transaction  {% ([t]) => { var l = t.blockLine; delete t.blockLine; return { type: 'tx', blockLine: l, value: t } } %}
   | %comment     {% ([c]) => { return { type: 'comment', blockLine: c.line, value: c.value } } %}
   | alias        {% ([a]) => { var l = a.blockLine; delete a.blockLine; return { type: 'alias', blockLine: l, value: a } } %}
+  | accountDecl  {% ([a]) => { var l = a.blockLine; delete a.blockLine; return { type: 'accountDecl', blockLine: l, value: a } } %}
+  | %directive   {% ([d]) => { return { type: 'directive', blockLine: d.line, value: d.text } } %}
+
+accountDecl -> %accountDirective %account %comment:?
+                                                  {%
+                                                    function([kw, acct, cmt]) {
+                                                      return {
+                                                        blockLine: kw.line,
+                                                        account: acct.value,
+                                                        comment: cmt?.value || undefined,
+                                                      }
+                                                    }
+                                                  %}
 
 transaction -> %date %ws check:? %payee %comment:? %newline expenselines
                                                   {%
