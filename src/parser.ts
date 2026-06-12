@@ -29,6 +29,12 @@ export interface TransactionCache {
   rawComments: CommentWithBlock[];
 
   /**
+   * rawAccountDeclarations stores `account` directives as they come directly
+   * from the parser.
+   */
+  rawAccountDeclarations: AccountDeclarationWithBlock[];
+
+  /**
    * parsingErrors contains a list of all errors which occured while parsing the
    * ledger file. If there are any errors, then the results of the transaction
    * cache may not be completely valid due to transactions that could not be
@@ -124,9 +130,36 @@ export interface Comment {
   value: string;
 }
 
+/**
+ * AccountDeclaration represents an `account` directive, which declares an
+ * account that may be used in transactions.
+ * See https://hledger.org/hledger.html#account
+ */
+export interface AccountDeclaration {
+  type: 'accountDecl';
+  blockLine: number;
+  value: {
+    account: string;
+    comment?: string;
+  };
+}
+
+/**
+ * OtherDirective represents a directive which is recognized but otherwise
+ * ignored by this plugin, e.g. `commodity 1000.00€`.
+ */
+export interface OtherDirective {
+  type: 'directive';
+  blockLine: number;
+  value: string;
+}
+
 export type AliasWithBlock = Alias & { block: FileBlock };
 export type CommentWithBlock = Comment & { block: FileBlock };
 export type TransactionWithBlock = Transaction & { block: FileBlock };
+export type AccountDeclarationWithBlock = AccountDeclaration & {
+  block: FileBlock;
+};
 
 export interface FileBlock {
   block: string;
@@ -134,11 +167,13 @@ export interface FileBlock {
   lastLine: number;
 }
 
-type Element = Transaction | Alias | Comment;
-type ElementWithBlock =
-  | TransactionWithBlock
-  | AliasWithBlock
-  | CommentWithBlock;
+type Element =
+  | Transaction
+  | Alias
+  | Comment
+  | AccountDeclaration
+  | OtherDirective;
+type ElementWithBlock = Element & { block: FileBlock };
 
 export const parse = (
   fileContents: string,
@@ -183,6 +218,7 @@ export const parse = (
   const aliases: AliasWithBlock[] = [];
   const comments: CommentWithBlock[] = [];
   const rawTxs: TransactionWithBlock[] = [];
+  const accountDeclarations: AccountDeclarationWithBlock[] = [];
   results.forEach((el) => {
     switch (el.type) {
       case 'alias':
@@ -193,6 +229,12 @@ export const parse = (
         break;
       case 'tx':
         rawTxs.push(el);
+        break;
+      case 'accountDecl':
+        accountDeclarations.push(el);
+        break;
+      case 'directive':
+        // Recognized but not used by this plugin.
         break;
     }
   });
@@ -247,27 +289,43 @@ export const parse = (
       .map(({ value }) => value.payee)
       .sort((a, b) => (a.toLowerCase() > b.toLowerCase() ? 1 : -1)),
   );
+  const usedAccounts = flatMap(txs, ({ value }) =>
+    value.expenselines.flatMap((line) =>
+      'dealiasedAccount' in line ? [line.dealiasedAccount] : [],
+    ),
+  );
+  const declaredAccounts = accountDeclarations.map(({ value }) =>
+    dealiasAccount(value.account, aliasMap),
+  );
   const accounts = sortedUniq(
-    flatMap(txs, ({ value }) =>
-      value.expenselines.flatMap((line) =>
-        'dealiasedAccount' in line ? [line.dealiasedAccount] : [],
-      ),
-    ).sort((a, b) => (a.toLowerCase() > b.toLowerCase() ? 1 : -1)),
+    [...usedAccounts, ...declaredAccounts].sort((a, b) =>
+      a.toLowerCase() > b.toLowerCase() ? 1 : -1,
+    ),
   );
 
+  const getAccountType = makeAccountTypeLookup(
+    accountDeclarations,
+    aliasMap,
+    settings,
+  );
   const assetAccounts: string[] = [];
   const expenseAccounts: string[] = [];
   const incomeAccounts: string[] = [];
   const liabilityAccounts: string[] = [];
   accounts.forEach((c) => {
-    if (c.startsWith(settings.assetAccountsPrefix)) {
-      assetAccounts.push(c);
-    } else if (c.startsWith(settings.expenseAccountsPrefix)) {
-      expenseAccounts.push(c);
-    } else if (c.startsWith(settings.incomeAccountsPrefix)) {
-      incomeAccounts.push(c);
-    } else if (c.startsWith(settings.liabilityAccountsPrefix)) {
-      liabilityAccounts.push(c);
+    switch (getAccountType(c)) {
+      case 'asset':
+        assetAccounts.push(c);
+        break;
+      case 'expense':
+        expenseAccounts.push(c);
+        break;
+      case 'income':
+        incomeAccounts.push(c);
+        break;
+      case 'liability':
+        liabilityAccounts.push(c);
+        break;
     }
   });
 
@@ -281,6 +339,7 @@ export const parse = (
     aliases: aliasMap,
     rawAliases: aliases,
     rawComments: comments,
+    rawAccountDeclarations: accountDeclarations,
     transactions: txs,
     payees,
     accounts,
@@ -290,6 +349,104 @@ export const parse = (
     expenseAccounts,
     incomeAccounts,
     liabilityAccounts,
+  };
+};
+
+export type AccountType =
+  | 'asset'
+  | 'liability'
+  | 'equity'
+  | 'income'
+  | 'expense'
+  | 'unknown';
+
+const accountTypeFromTagValue = (value: string): AccountType | undefined => {
+  switch (value.toLowerCase()) {
+    case 'a':
+    case 'asset':
+    case 'assets':
+    case 'c': // Cash is a subtype of Asset
+    case 'cash':
+      return 'asset';
+    case 'l':
+    case 'liability':
+    case 'liabilities':
+      return 'liability';
+    case 'e':
+    case 'equity':
+    case 'v': // Conversion is a subtype of Equity
+    case 'conversion':
+      return 'equity';
+    case 'r':
+    case 'revenue':
+    case 'revenues':
+    case 'income':
+      return 'income';
+    case 'x':
+    case 'expense':
+    case 'expenses':
+      return 'expense';
+    default:
+      return undefined;
+  }
+};
+
+/**
+ * parseAccountTypeTag extracts the account type from the comment of an
+ * `account` directive, declared with a `type:` tag.
+ * See https://hledger.org/hledger.html#declaring-account-types
+ */
+export const parseAccountTypeTag = (
+  comment: string | undefined,
+): AccountType | undefined => {
+  if (!comment) {
+    return undefined;
+  }
+  const match = /(?:^|[\s,])type:\s*([^,\s]+)/i.exec(comment);
+  return match ? accountTypeFromTagValue(match[1]) : undefined;
+};
+
+/**
+ * makeAccountTypeLookup creates a function which categorizes an account name.
+ * Types declared on `account` directives take precedence and are inherited by
+ * subaccounts, as in hledger. Accounts without a declared type fall back to
+ * matching the account name prefixes from the plugin settings.
+ */
+export const makeAccountTypeLookup = (
+  accountDeclarations: AccountDeclaration[],
+  aliases: Map<string, string>,
+  settings: ISettings,
+): ((account: string) => AccountType) => {
+  const declaredTypes = new Map<string, AccountType>();
+  accountDeclarations.forEach(({ value }) => {
+    const declaredType = parseAccountTypeTag(value.comment);
+    if (declaredType) {
+      declaredTypes.set(dealiasAccount(value.account, aliases), declaredType);
+    }
+  });
+
+  return (account: string): AccountType => {
+    // Subaccounts inherit the type of the closest declared ancestor.
+    let candidate = account;
+    while (candidate !== '') {
+      const declaredType = declaredTypes.get(candidate);
+      if (declaredType) {
+        return declaredType;
+      }
+      const splitAt = candidate.lastIndexOf(':');
+      candidate = splitAt === -1 ? '' : candidate.substring(0, splitAt);
+    }
+
+    if (account.startsWith(settings.assetAccountsPrefix)) {
+      return 'asset';
+    } else if (account.startsWith(settings.expenseAccountsPrefix)) {
+      return 'expense';
+    } else if (account.startsWith(settings.incomeAccountsPrefix)) {
+      return 'income';
+    } else if (account.startsWith(settings.liabilityAccountsPrefix)) {
+      return 'liability';
+    }
+    return 'unknown';
   };
 };
 

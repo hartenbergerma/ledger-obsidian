@@ -1,5 +1,4 @@
 import type { TransactionCache } from '../parser';
-import { ISettings } from '../settings';
 import {
   dealiasAccount,
   makeAccountTree,
@@ -37,7 +36,6 @@ const Expander = styled.span`
 
 const Tree: React.FC<{
   txCache: TransactionCache;
-  settings: ISettings;
   data: Node;
   depth: number;
   selectedAccounts: string[];
@@ -47,6 +45,13 @@ const Tree: React.FC<{
   const subRows = props.data.subRows;
   const hasChildren = subRows !== undefined && subRows.length > 0;
 
+  const isBalanceType = (account: string): boolean =>
+    props.txCache.assetAccounts.contains(account) ||
+    props.txCache.liabilityAccounts.contains(account);
+  const isFlowType = (account: string): boolean =>
+    props.txCache.expenseAccounts.contains(account) ||
+    props.txCache.incomeAccounts.contains(account);
+
   const id = props.data.id;
   const selected = props.selectedAccounts.contains(id);
   const toggleSelected = (): void => {
@@ -54,32 +59,19 @@ const Tree: React.FC<{
       props.setSelectedAccounts(
         props.selectedAccounts.filter((account) => account !== id),
       );
-    } else {
-      const newSelected = [...props.selectedAccounts, id];
-      if (
-        props.txCache.assetAccounts.contains(id) ||
-        props.txCache.liabilityAccounts.contains(id)
-      ) {
-        props.setSelectedAccounts(
-          deselectRowsWithoutPrefix(newSelected, [
-            props.settings.assetAccountsPrefix,
-            props.settings.liabilityAccountsPrefix,
-          ]),
-        );
-      } else if (
-        props.txCache.expenseAccounts.contains(id) ||
-        props.txCache.incomeAccounts.contains(id)
-      ) {
-        props.setSelectedAccounts(
-          deselectRowsWithoutPrefix(newSelected, [
-            props.settings.expenseAccountsPrefix,
-            props.settings.incomeAccountsPrefix,
-          ]),
-        );
-      } else {
-        props.setSelectedAccounts(newSelected);
-      }
+      return;
     }
+
+    // Make sure the selected accounts are all of the same type, which helps
+    // ensure the visualization fits the account type. Accounts of an unknown
+    // type may be combined with any other account.
+    let newSelected = [...props.selectedAccounts, id];
+    if (isBalanceType(id)) {
+      newSelected = newSelected.filter((account) => !isFlowType(account));
+    } else if (isFlowType(id)) {
+      newSelected = newSelected.filter((account) => !isBalanceType(account));
+    }
+    props.setSelectedAccounts(newSelected);
   };
 
   return (
@@ -103,7 +95,6 @@ const Tree: React.FC<{
         ? subRows.map((child) => (
             <Tree
               txCache={props.txCache}
-              settings={props.settings}
               data={child}
               key={child.id}
               depth={props.depth + 1}
@@ -118,7 +109,6 @@ const Tree: React.FC<{
 
 export const AccountsList: React.FC<{
   txCache: TransactionCache;
-  settings: ISettings;
   selectedAccounts: string[];
   setSelectedAccounts: React.Dispatch<React.SetStateAction<string[]>>;
 }> = (props): JSX.Element => {
@@ -139,7 +129,6 @@ export const AccountsList: React.FC<{
       {data.map((root) => (
         <Tree
           txCache={props.txCache}
-          settings={props.settings}
           data={root}
           key={root.id}
           depth={0}
@@ -150,17 +139,3 @@ export const AccountsList: React.FC<{
     </div>
   );
 };
-
-/**
- * deselecteRowsWithoutPrefix filters the provided list of accounts, removing
- * ones which do not start with one of the provided prefixes. This can be used
- * to make sure the selected accounts are all of the same type, which helps
- * ensure the visualization fits the account type.
- */
-const deselectRowsWithoutPrefix = (
-  selectedAccounts: string[],
-  prefixes: string[],
-): string[] =>
-  selectedAccounts.filter((account) =>
-    prefixes.some((prefix) => account.startsWith(prefix)),
-  );

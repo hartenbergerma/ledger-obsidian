@@ -2,7 +2,7 @@ import {
   makeDailyAccountBalanceChangeMap,
   makeDailyBalanceMap,
 } from '../balance-utils';
-import { Interval } from '../date-utils';
+import { DateRange, Interval, resolveDateRange } from '../date-utils';
 import { LedgerModifier } from '../file-interface';
 import type { TransactionCache } from '../parser';
 import { ISettings } from '../settings';
@@ -17,8 +17,13 @@ import {
   FlexMainContent,
   FlexShrink,
 } from './SharedStyles';
-import { RecentTransactionList, TransactionList } from './TransactionList';
+import {
+  MobileTransactionList,
+  RecentTransactionList,
+  TransactionList,
+} from './TransactionList';
 import { Step, Steps } from 'intro.js-react';
+import { Moment } from 'moment';
 import { Platform } from 'obsidian';
 import React from 'react';
 import styled from 'styled-components';
@@ -34,18 +39,22 @@ export const LedgerDashboard: React.FC<{
   txCache: TransactionCache;
   updater: LedgerModifier;
 }> = (props): JSX.Element => {
-  if (!props.txCache) {
-    return <p>Loading...</p>;
-  }
-
   const [tutorialIndex, setTutorialIndex] = React.useState(props.tutorialIndex);
   const setTutorialIndexWrapper = (index: number): void => {
     setTutorialIndex(index); // This updates the current state
     props.setTutorialIndex(index); // This updates the saved state
   };
 
+  if (!props.txCache) {
+    return <p>Loading...</p>;
+  }
+
   return Platform.isMobile ? (
-    <MobileDashboard settings={props.settings} txCache={props.txCache} />
+    <MobileDashboard
+      settings={props.settings}
+      txCache={props.txCache}
+      updater={props.updater}
+    />
   ) : (
     <DesktopDashboard
       tutorialIndex={tutorialIndex}
@@ -68,21 +77,120 @@ const Header: React.FC<{}> = (props): JSX.Element => (
   </div>
 );
 
+const useDailyAccountBalanceMap = (
+  txCache: TransactionCache,
+): Map<string, Map<string, number>> =>
+  React.useMemo(() => {
+    console.time('daily-balance-map');
+
+    const changeMap = makeDailyAccountBalanceChangeMap(txCache.transactions);
+    const balanceMap = makeDailyBalanceMap(
+      txCache.accounts,
+      changeMap,
+      txCache.firstDate,
+      window.moment(),
+    );
+
+    console.timeLog('daily-balance-map');
+    console.timeEnd('daily-balance-map');
+
+    return balanceMap;
+  }, [txCache]);
+
+const useDateRange = (
+  txCache: TransactionCache,
+  initialRange: DateRange,
+): {
+  dateRange: DateRange;
+  setDateRange: (range: DateRange) => void;
+  startDate: Moment;
+  endDate: Moment;
+  interval: Interval;
+} => {
+  const [dateRange, setDateRange] = React.useState<DateRange>(initialRange);
+  const { startDate, endDate, interval } = React.useMemo(
+    () => resolveDateRange(dateRange, txCache.firstDate),
+    [dateRange, txCache],
+  );
+  return { dateRange, setDateRange, startDate, endDate, interval };
+};
+
+const MobileStyles = styled.div`
+  padding-bottom: 48px;
+
+  .ledger-mobile-account-toggle {
+    width: 100%;
+    text-align: left;
+    margin: 8px 0;
+  }
+`;
+
 const MobileDashboard: React.FC<{
   settings: ISettings;
   txCache: TransactionCache;
+  updater: LedgerModifier;
 }> = (props): JSX.Element => {
-  const [selectedTab, setSelectedTab] = React.useState('transactions');
+  const dailyAccountBalanceMap = useDailyAccountBalanceMap(props.txCache);
+  const { dateRange, setDateRange, startDate, endDate, interval } =
+    useDateRange(props.txCache, 'month');
+  const [selectedAccounts, setSelectedAccounts] = React.useState<string[]>([]);
+  const [accountsExpanded, setAccountsExpanded] = React.useState(false);
 
-  /*
   return (
-    <MobileTransactionList
-      currencySymbol={props.settings.currencySymbol}
-      txCache={props.txCache}
-    />
+    <MobileStyles>
+      <DateRangeSelector range={dateRange} setRange={setDateRange} />
+
+      <button
+        className="ledger-mobile-account-toggle"
+        onClick={() => setAccountsExpanded(!accountsExpanded)}
+      >
+        {accountsExpanded ? '▾' : '▸'} Filter by account
+        {selectedAccounts.length > 0
+          ? ` (${selectedAccounts.length} selected)`
+          : ''}
+      </button>
+      {accountsExpanded ? (
+        <AccountsList
+          txCache={props.txCache}
+          selectedAccounts={selectedAccounts}
+          setSelectedAccounts={setSelectedAccounts}
+        />
+      ) : null}
+
+      {props.txCache.parsingErrors.length > 0 ? (
+        <ParseErrors txCache={props.txCache} />
+      ) : null}
+
+      {selectedAccounts.length === 0 ? (
+        <NetWorthVisualization
+          dailyAccountBalanceMap={dailyAccountBalanceMap}
+          startDate={startDate}
+          endDate={endDate}
+          interval={interval}
+          txCache={props.txCache}
+        />
+      ) : (
+        <AccountVisualization
+          dailyAccountBalanceMap={dailyAccountBalanceMap}
+          allAccounts={props.txCache.accounts}
+          selectedAccounts={selectedAccounts}
+          startDate={startDate}
+          endDate={endDate}
+          interval={interval}
+        />
+      )}
+
+      <h2>Transactions</h2>
+      <MobileTransactionList
+        currencySymbol={props.settings.currencySymbol}
+        txCache={props.txCache}
+        updater={props.updater}
+        selectedAccounts={selectedAccounts}
+        startDate={startDate}
+        endDate={endDate}
+      />
+    </MobileStyles>
   );
-  */
-  return <p>Dashboard not yet supported on mobile.</p>;
 };
 
 const DesktopDashboard: React.FC<{
@@ -92,43 +200,15 @@ const DesktopDashboard: React.FC<{
   txCache: TransactionCache;
   updater: LedgerModifier;
 }> = (props): JSX.Element => {
-  const dailyAccountBalanceMap = React.useMemo(() => {
-    console.time('daily-balance-map');
-
-    const changeMap = makeDailyAccountBalanceChangeMap(
-      props.txCache.transactions,
-    );
-    const balanceMap = makeDailyBalanceMap(
-      props.txCache.accounts,
-      changeMap,
-      props.txCache.firstDate,
-      window.moment(),
-    );
-
-    console.timeLog('daily-balance-map');
-    console.timeEnd('daily-balance-map');
-
-    return balanceMap;
-  }, [props.txCache]);
-
+  const dailyAccountBalanceMap = useDailyAccountBalanceMap(props.txCache);
+  const { dateRange, setDateRange, startDate, endDate, interval } =
+    useDateRange(props.txCache, 'month');
   const [selectedAccounts, setSelectedAccounts] = React.useState<string[]>([]);
-  const [startDate, setStartDate] = React.useState(
-    window.moment().subtract(2, 'months'),
-  );
-  const [endDate, setEndDate] = React.useState(window.moment());
-  const [interval, setInterval] = React.useState<Interval>('week');
 
   return (
     <>
       <Header>
-        <DateRangeSelector
-          startDate={startDate}
-          endDate={endDate}
-          setStartDate={setStartDate}
-          setEndDate={setEndDate}
-          interval={interval}
-          setInterval={setInterval}
-        />
+        <DateRangeSelector range={dateRange} setRange={setDateRange} />
         {props.tutorialIndex !== -1 ? (
           <Tutorial
             tutorialIndex={props.tutorialIndex}
@@ -141,7 +221,6 @@ const DesktopDashboard: React.FC<{
         <FlexSidebar>
           <AccountsList
             txCache={props.txCache}
-            settings={props.settings}
             selectedAccounts={selectedAccounts}
             setSelectedAccounts={setSelectedAccounts}
           />
@@ -157,7 +236,7 @@ const DesktopDashboard: React.FC<{
                 startDate={startDate}
                 endDate={endDate}
                 interval={interval}
-                settings={props.settings}
+                txCache={props.txCache}
               />
               <RecentTransactionList
                 currencySymbol={props.settings.currencySymbol}
@@ -212,12 +291,8 @@ const Tutorial: React.FC<{
       tooltipClass: 'ledger-tutorial-tooltip',
     },
     {
-      intro: 'Change the interval over which transactions are rolled up.',
-      element: '.ledger-interval-selectors',
-      tooltipClass: 'ledger-tutorial-tooltip',
-    },
-    {
-      intro: 'Only transactions within this date range will be displayed.',
+      intro:
+        'Choose the time period to display. The graph resolution adjusts automatically.',
       element: '.ledger-daterange-selectors',
       tooltipClass: 'ledger-tutorial-tooltip',
     },
@@ -246,7 +321,7 @@ const Tutorial: React.FC<{
   ];
 
   const onExit = (index: number): void => {
-    if (index + 1 === steps.length) {
+    if (index + 1 >= steps.length) {
       props.setTutorialIndex(-1);
     } else {
       props.setTutorialIndex(index);
@@ -258,7 +333,7 @@ const Tutorial: React.FC<{
       enabled={true}
       steps={steps}
       onExit={onExit}
-      initialStep={props.tutorialIndex}
+      initialStep={Math.min(props.tutorialIndex, steps.length - 1)}
     />
   );
 };

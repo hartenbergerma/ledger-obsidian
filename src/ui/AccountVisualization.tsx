@@ -1,10 +1,13 @@
 import {
   makeBalanceData,
-  makeDailyAccountBalanceChangeMap,
   makeDeltaData,
   removeDuplicateAccounts,
 } from '../balance-utils';
-import { Interval, makeBucketNames } from '../date-utils';
+import {
+  Interval,
+  makeBucketNames,
+  makeChartLabelFormatter,
+} from '../date-utils';
 import { IBarChartOptions, ILineChartOptions } from 'chartist';
 import { Moment } from 'moment';
 import React from 'react';
@@ -42,8 +45,6 @@ export const AccountVisualization: React.FC<{
   // TODO: Set the default mode based on the type of account selected
   const [mode, setMode] = React.useState('balance');
 
-  console.log(props.dailyAccountBalanceMap);
-
   const filteredAccounts = removeDuplicateAccounts(props.selectedAccounts);
   const dateBuckets = makeBucketNames(
     props.interval,
@@ -58,6 +59,7 @@ export const AccountVisualization: React.FC<{
         allAccounts={props.allAccounts}
         accounts={filteredAccounts}
         dateBuckets={dateBuckets}
+        interval={props.interval}
       />
     ) : (
       <DeltaVisualization
@@ -105,6 +107,7 @@ const BalanceVisualization: React.FC<{
   allAccounts: string[];
   accounts: string[];
   dateBuckets: string[];
+  interval: Interval;
 }> = (props): JSX.Element => {
   const data = {
     labels: props.dateBuckets,
@@ -123,6 +126,12 @@ const BalanceVisualization: React.FC<{
     width: '100%',
     showArea: false,
     showPoint: true,
+    axisX: {
+      labelInterpolationFnc: makeChartLabelFormatter(
+        props.interval,
+        props.dateBuckets.length,
+      ),
+    },
   };
 
   return <ChartistGraph data={data} options={options} type="Line" />;
@@ -155,6 +164,12 @@ const DeltaVisualization: React.FC<{
   const options: IBarChartOptions = {
     height: '300px',
     width: '100%',
+    axisX: {
+      labelInterpolationFnc: makeChartLabelFormatter(
+        props.interval,
+        props.dateBuckets.length,
+      ),
+    },
   };
 
   return <ChartistGraph data={data} options={options} type="Bar" />;

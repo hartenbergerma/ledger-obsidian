@@ -1,7 +1,12 @@
 import { makeNetWorthData } from '../balance-utils';
-import { Interval, makeBucketNames } from '../date-utils';
-import { ISettings } from '../settings';
+import {
+  Interval,
+  makeBucketNames,
+  makeChartLabelFormatter,
+} from '../date-utils';
+import { TransactionCache } from '../parser';
 import { ILineChartOptions } from 'chartist';
+import { union } from 'lodash';
 import { Moment } from 'moment';
 import React from 'react';
 import ChartistGraph from 'react-chartist';
@@ -18,12 +23,19 @@ export const NetWorthVisualization: React.FC<{
   startDate: Moment;
   endDate: Moment;
   interval: Interval;
-  settings: ISettings;
+  txCache: TransactionCache;
 }> = (props): JSX.Element => {
   const dateBuckets = makeBucketNames(
     props.interval,
     props.startDate,
     props.endDate,
+  );
+  const netWorthAccounts = React.useMemo(
+    () =>
+      new Set(
+        union(props.txCache.assetAccounts, props.txCache.liabilityAccounts),
+      ),
+    [props.txCache],
   );
   const data = {
     labels: dateBuckets,
@@ -31,7 +43,7 @@ export const NetWorthVisualization: React.FC<{
       makeNetWorthData(
         props.dailyAccountBalanceMap,
         dateBuckets,
-        props.settings,
+        netWorthAccounts,
       ),
     ],
   };
@@ -41,6 +53,12 @@ export const NetWorthVisualization: React.FC<{
     width: '100%',
     showArea: false,
     showPoint: true,
+    axisX: {
+      labelInterpolationFnc: makeChartLabelFormatter(
+        props.interval,
+        dateBuckets.length,
+      ),
+    },
   };
 
   const type = 'Line';

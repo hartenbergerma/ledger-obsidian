@@ -59,6 +59,14 @@ export class SettingsTab extends PluginSettingTab {
       text: "Ledger uses accounts to group expense types. Accounts are grouped into a hierarchy by separating with a colon. For example 'expenses:food:grocery' and 'expenses:food:restaurants",
     });
 
+    containerEl.createEl('p', {
+      text:
+        'Note: Accounts declared in the Ledger file with an account directive ' +
+        'and a \'type:\' tag (e.g. "account Cash  ; type: A") are categorized ' +
+        'by their declared type, and the prefixes below are only used as a ' +
+        'fallback.',
+    });
+
     new Setting(containerEl)
       .setName('Asset Account Prefix')
       .setDesc(

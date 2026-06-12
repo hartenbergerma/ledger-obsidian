@@ -1,6 +1,5 @@
 import { getWithDefault } from './generic-utils';
 import { EnhancedTransaction } from './parser';
-import { ISettings } from './settings';
 import { Moment } from 'moment';
 
 export type ChartData = {
@@ -10,24 +9,28 @@ export type ChartData = {
 
 const calcNetWorth = (
   balanceData: Map<string, number>,
-  settings: ISettings,
+  netWorthAccounts: Set<string>,
 ): number =>
   [...balanceData.entries()].reduce((accum, curr) => {
     const [acct, bal] = curr;
-    return acct.startsWith(settings.assetAccountsPrefix) ||
-      acct.startsWith(settings.liabilityAccountsPrefix)
-      ? accum + bal
-      : accum;
+    return netWorthAccounts.has(acct) ? accum + bal : accum;
   }, 0);
 
+/**
+ * makeNetWorthData creates a list of data points representing the sum of the
+ * balances of the provided accounts (normally all asset and liability
+ * accounts) over the provided buckets.
+ */
 export const makeNetWorthData = (
   dailyAccountBalanceMap: Map<string, Map<string, number>>,
   bucketNames: string[],
-  settings: ISettings,
+  netWorthAccounts: Set<string>,
 ): ChartData =>
   bucketNames.map((bucket) => {
     const balanceData = dailyAccountBalanceMap.get(bucket);
-    const netWorth = balanceData ? calcNetWorth(balanceData, settings) : 0;
+    const netWorth = balanceData
+      ? calcNetWorth(balanceData, netWorthAccounts)
+      : 0;
     return {
       x: bucket,
       y: netWorth,

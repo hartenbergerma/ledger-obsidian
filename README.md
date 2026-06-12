@@ -11,8 +11,12 @@ safely in your Obsidian Vault instead.
 - [x] Widget to quickly input expenses.
   - Use it with Obsidian Mobile to track expenses as they occur on the go!
 - [x] Auto suggest previous accounts and expenses to speed entry.
+  - Accounts declared with [`account` directives](https://hledger.org/hledger.html#account)
+    are suggested as well, and `type:` tags (e.g. `account Cash ; type: A`)
+    are used to categorize accounts for the expense, income, and transfer forms.
 - [x] Obsidian Protocol handling to quickly launch Obsidian and immediately record a transaction
   - Create a Shortcut on mobile to `obsidian://ledger`
+- [x] Dashboard with net-worth and account visualizations, on desktop and mobile.
 - [ ] Reporting (In progress!)
 - [ ] Account reconciliation (planned soon!)
 

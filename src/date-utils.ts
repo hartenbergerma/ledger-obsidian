@@ -4,6 +4,80 @@ import { Moment } from 'moment';
 
 export type Interval = 'day' | 'week' | 'month';
 
+export type DateRange = 'week' | 'month' | '6months' | 'year' | 'all';
+
+export const dateRangeOptions: { id: DateRange; label: string }[] = [
+  { id: 'week', label: 'Last Week' },
+  { id: 'month', label: 'Last Month' },
+  { id: '6months', label: 'Last 6 Months' },
+  { id: 'year', label: 'Last Year' },
+  { id: 'all', label: 'All Time' },
+];
+
+/**
+ * chooseInterval selects a graph resolution which keeps the number of data
+ * points reasonable for the provided date range.
+ */
+export const chooseInterval = (
+  startDate: Moment,
+  endDate: Moment,
+): Interval => {
+  const days = endDate.diff(startDate, 'days');
+  if (days <= 35) {
+    return 'day';
+  } else if (days <= 200) {
+    return 'week';
+  }
+  return 'month';
+};
+
+/**
+ * resolveDateRange converts a named date range into concrete start and end
+ * dates and an automatically chosen graph resolution. The firstTxDate is used
+ * as the beginning of the 'all' range.
+ */
+export const resolveDateRange = (
+  range: DateRange,
+  firstTxDate: Moment,
+): { startDate: Moment; endDate: Moment; interval: Interval } => {
+  const endDate = window.moment();
+  let startDate: Moment;
+  switch (range) {
+    case 'week':
+      startDate = endDate.clone().subtract(1, 'week');
+      break;
+    case 'month':
+      startDate = endDate.clone().subtract(1, 'month');
+      break;
+    case '6months':
+      startDate = endDate.clone().subtract(6, 'months');
+      break;
+    case 'year':
+      startDate = endDate.clone().subtract(1, 'year');
+      break;
+    case 'all':
+      startDate = window.moment.min(firstTxDate.clone(), endDate);
+      break;
+  }
+  return { startDate, endDate, interval: chooseInterval(startDate, endDate) };
+};
+
+/**
+ * makeChartLabelFormatter creates a chartist label interpolation function
+ * which formats bucket names for the provided interval and skips labels when
+ * there are too many buckets to remain readable.
+ */
+export const makeChartLabelFormatter =
+  (interval: Interval, bucketCount: number, maxLabels = 12) =>
+  (value: string, index: number): string | null => {
+    const everyNth = Math.ceil(bucketCount / maxLabels);
+    if (index % everyNth !== 0) {
+      return null;
+    }
+    const format = interval === 'month' ? 'MMM YYYY' : 'MMM D';
+    return window.moment(value).format(format);
+  };
+
 /**
  * makeBucketNames creates a list of dates at the provided interval between the
  * startDate and the endDate.
