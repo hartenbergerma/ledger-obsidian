@@ -18,6 +18,22 @@ const ListContainer = styled.div<{ mobile: boolean }>`
         padding-top: 10px;
         padding-bottom: 10px;
       }
+
+      /*
+      Make the expand/collapse control a large, visually distinct button so it
+      is easy to tell apart from selecting the account itself.
+      */
+      .ledger-account-expander,
+      .ledger-account-expander-spacer {
+        width: 38px;
+      }
+
+      .ledger-account-expander {
+        margin-right: 6px;
+        font-size: 1.4em;
+        border-radius: 4px;
+        background-color: var(--background-secondary);
+      }
     `}
 `;
 
@@ -60,11 +76,25 @@ const AccountName = styled.span`
 `;
 
 const Expander = styled.span`
-  flex-grow: 0;
-  display: inline-block;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 15px;
+  cursor: pointer;
+  color: var(--text-muted);
   user-select: none;
   -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+
+  :hover {
+    color: var(--text-normal);
+  }
+`;
+
+const ExpanderSpacer = styled.span`
+  flex-shrink: 0;
+  width: 15px;
 `;
 
 /**
@@ -101,7 +131,6 @@ const useCurrentBalances = (
   }, [dailyAccountBalanceMap]);
 
 const Tree: React.FC<{
-  txCache: TransactionCache;
   data: Node;
   depth: number;
   selectedAccounts: string[];
@@ -113,45 +142,32 @@ const Tree: React.FC<{
   const subRows = props.data.subRows;
   const hasChildren = subRows !== undefined && subRows.length > 0;
 
-  const isBalanceType = (account: string): boolean =>
-    props.txCache.assetAccounts.contains(account) ||
-    props.txCache.liabilityAccounts.contains(account);
-  const isFlowType = (account: string): boolean =>
-    props.txCache.expenseAccounts.contains(account) ||
-    props.txCache.incomeAccounts.contains(account);
-
   const id = props.data.id;
   const selected = props.selectedAccounts.contains(id);
   const balance = props.balances.get(id);
-  const toggleSelected = (): void => {
-    if (selected) {
-      props.setSelectedAccounts(
-        props.selectedAccounts.filter((account) => account !== id),
-      );
-      return;
-    }
 
-    // Make sure the selected accounts are all of the same type, which helps
-    // ensure the visualization fits the account type. Accounts of an unknown
-    // type may be combined with any other account.
-    let newSelected = [...props.selectedAccounts, id];
-    if (isBalanceType(id)) {
-      newSelected = newSelected.filter((account) => !isFlowType(account));
-    } else if (isFlowType(id)) {
-      newSelected = newSelected.filter((account) => !isBalanceType(account));
-    }
-    props.setSelectedAccounts(newSelected);
+  // Selecting an account simply toggles it. Any combination of accounts may be
+  // selected, including across different categories.
+  const toggleSelected = (): void => {
+    props.setSelectedAccounts(
+      selected
+        ? props.selectedAccounts.filter((account) => account !== id)
+        : [...props.selectedAccounts, id],
+    );
   };
 
   return (
     <>
       <TreeRow style={{ paddingLeft: `${props.depth}rem` }}>
         {hasChildren ? (
-          <Expander onClick={() => setExpanded(!expanded)}>
-            {expanded ? '-' : '+'}
+          <Expander
+            className="ledger-account-expander"
+            onClick={() => setExpanded(!expanded)}
+          >
+            {expanded ? '−' : '+'}
           </Expander>
         ) : (
-          <Expander />
+          <ExpanderSpacer className="ledger-account-expander-spacer" />
         )}
         <AccountName
           className={`ledger-account-name${selected ? ' selected' : ''}`}
@@ -169,7 +185,6 @@ const Tree: React.FC<{
       {hasChildren && expanded && subRows
         ? subRows.map((child) => (
             <Tree
-              txCache={props.txCache}
               data={child}
               key={child.id}
               depth={props.depth + 1}
@@ -198,8 +213,11 @@ export const AccountsList: React.FC<{
     });
     sortAccountTree(nodes);
 
-    // By default, the top level starts expanded
-    nodes.forEach((node) => (node.expanded = true));
+    // The top level starts expanded on desktop, but everything starts collapsed
+    // on mobile to keep the initially visible list short.
+    if (!Platform.isMobile) {
+      nodes.forEach((node) => (node.expanded = true));
+    }
     return nodes;
   }, [props.txCache]);
 
@@ -209,7 +227,6 @@ export const AccountsList: React.FC<{
     <ListContainer className="ledger-account-list" mobile={Platform.isMobile}>
       {data.map((root) => (
         <Tree
-          txCache={props.txCache}
           data={root}
           key={root.id}
           depth={0}
