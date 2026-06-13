@@ -1,5 +1,5 @@
 import LedgerPlugin from './main';
-import { AddExpenseModal, Operation } from './modals';
+import { AddExpenseModal, ConfirmModal, Operation } from './modals';
 import { EnhancedTransaction, parse, TransactionCache } from './parser';
 import type { ISettings } from './settings';
 import type { MetadataCache, TFile, Vault } from 'obsidian';
@@ -37,6 +37,22 @@ export class LedgerModifier {
       '\n' +
       lines.slice(oldTx.block.lastLine + 1).join('\n');
     return vault.modify(this.ledgerFile, newLines);
+  }
+
+  /**
+   * promptDeleteTransaction asks the user to confirm before permanently
+   * deleting a transaction, so that nothing is removed by an accidental click.
+   */
+  public promptDeleteTransaction(tx: EnhancedTransaction): void {
+    new ConfirmModal(
+      this.plugin.app,
+      'Delete transaction',
+      `Are you sure you want to delete "${tx.value.payee}" from ${tx.value.date}? This cannot be undone.`,
+      'Delete',
+      () => {
+        this.deleteTransaction(tx);
+      },
+    ).open();
   }
 
   public async deleteTransaction(tx: EnhancedTransaction): Promise<void> {

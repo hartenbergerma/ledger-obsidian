@@ -16,11 +16,28 @@ import styled from 'styled-components';
 
 const ChartHeader = styled.div`
   display: flex;
+  flex-wrap: wrap;
 `;
 
 const Legend = styled.div`
   margin-left: auto;
+  min-width: 0;
   flex-shrink: 1;
+
+  .ct-legend {
+    margin: 0;
+  }
+
+  /*
+  When there is not enough horizontal room (e.g. on mobile), allow the legend
+  entries to wrap onto multiple lines and stack instead of overflowing and
+  forcing the chart to scroll sideways.
+  */
+  .ct-legend li {
+    display: inline-block;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
 `;
 
 const ChartTypeSelector = styled.div`

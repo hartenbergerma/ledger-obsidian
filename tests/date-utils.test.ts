@@ -1,4 +1,5 @@
 import {
+  availableDateRangeOptions,
   bucketTransactions,
   chooseInterval,
   makeBucketNames,
@@ -80,6 +81,9 @@ describe('makeChartLabelFormatter()', () => {
 });
 
 describe('makeBucketNames()', () => {
+  // The end date is always included as the final bucket so that the most recent
+  // transactions are represented in the chart, even when the range does not
+  // divide evenly into the interval.
   describe('week', () => {
     test('less than a week', () => {
       const result = makeBucketNames(
@@ -87,7 +91,7 @@ describe('makeBucketNames()', () => {
         moment('2021-12-01'),
         moment('2021-12-03'),
       );
-      expect(result).toEqual(['2021-12-01']);
+      expect(result).toEqual(['2021-12-01', '2021-12-03']);
     });
     test('exactly a week', () => {
       const result = makeBucketNames(
@@ -95,7 +99,7 @@ describe('makeBucketNames()', () => {
         moment('2021-12-01'),
         moment('2021-12-07'),
       );
-      expect(result).toEqual(['2021-12-01']);
+      expect(result).toEqual(['2021-12-01', '2021-12-07']);
     });
     test('exactly 8 days', () => {
       const result = makeBucketNames(
@@ -118,6 +122,7 @@ describe('makeBucketNames()', () => {
         '2021-11-22',
         '2021-11-29',
         '2021-12-06',
+        '2021-12-08',
       ]);
     });
   });
@@ -128,7 +133,7 @@ describe('makeBucketNames()', () => {
         moment('2021-12-01'),
         moment('2021-12-03'),
       );
-      expect(result).toEqual(['2021-12-01']);
+      expect(result).toEqual(['2021-12-01', '2021-12-03']);
     });
     test('slightly over a month', () => {
       const result = makeBucketNames(
@@ -138,6 +143,49 @@ describe('makeBucketNames()', () => {
       );
       expect(result).toEqual(['2021-12-01', '2022-01-01']);
     });
+    test('does not duplicate the end date when it aligns to a bucket', () => {
+      const result = makeBucketNames(
+        'month',
+        moment('2021-10-01'),
+        moment('2021-12-01'),
+      );
+      expect(result).toEqual(['2021-10-01', '2021-11-01', '2021-12-01']);
+    });
+  });
+});
+
+describe('availableDateRangeOptions()', () => {
+  const now = moment('2021-12-15');
+  test('recent data only offers all time', () => {
+    const result = availableDateRangeOptions(moment('2021-12-13'), now);
+    expect(result.map(({ id }) => id)).toEqual(['all']);
+  });
+  test('a couple weeks of data offers last week and all time', () => {
+    const result = availableDateRangeOptions(moment('2021-12-01'), now);
+    expect(result.map(({ id }) => id)).toEqual(['week', 'all']);
+  });
+  test('a few months of data offers up through last month', () => {
+    const result = availableDateRangeOptions(moment('2021-08-01'), now);
+    expect(result.map(({ id }) => id)).toEqual(['week', 'month', 'all']);
+  });
+  test('most of a year of data adds last six months', () => {
+    const result = availableDateRangeOptions(moment('2021-02-01'), now);
+    expect(result.map(({ id }) => id)).toEqual([
+      'week',
+      'month',
+      '6months',
+      'all',
+    ]);
+  });
+  test('years of data offers every range', () => {
+    const result = availableDateRangeOptions(moment('2018-01-01'), now);
+    expect(result.map(({ id }) => id)).toEqual([
+      'week',
+      'month',
+      '6months',
+      'year',
+      'all',
+    ]);
   });
 });
 

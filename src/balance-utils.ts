@@ -7,7 +7,11 @@ export type ChartData = {
   y: number;
 }[];
 
-const calcNetWorth = (
+/**
+ * calcNetWorth sums the balances of the provided net worth accounts (normally
+ * all asset and liability accounts).
+ */
+export const calcNetWorth = (
   balanceData: Map<string, number>,
   netWorthAccounts: Set<string>,
 ): number =>
