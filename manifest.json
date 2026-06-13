@@ -1,11 +1,11 @@
 {
-  "id": "ledger-obsidian",
-  "name": "Ledger",
-  "author": "Tony Grosinger",
-  "authorUrl": "https://grosinger.net",
+  "id": "ledger-obsidian-2",
+  "name": "Ledger-2",
+  "author": "Martin Hartenberger",
+  "authorUrl": "https://github.com/hartenbergerma",
   "description": "Plain text accounting",
   "isDesktopOnly": false,
-  "version": "0.4.0",
+  "version": "0.5.0",
   "minAppVersion": "0.11.12",
   "js": "main.js"
 }

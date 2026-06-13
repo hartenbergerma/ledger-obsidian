@@ -15,7 +15,7 @@ Transaction Entry Modal
 
 .is-mobile .ledger-modal {
   margin-top: 8px;
-  top: 8px !important;
+  top: 128px !important;
   transform: none !important;
   max-height: calc(100vh - 16px) !important;
   overflow-y: auto !important;
