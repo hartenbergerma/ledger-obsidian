@@ -137,8 +137,10 @@ const ExpenseLineStyle = styled.div`
   }
 
   .currencyInput {
-    flex-basis: 200px;
-    flex-shrink: 1;
+    /* Keep the amount field only as wide as needed for the amount so the
+     * account name has room, especially on narrow (mobile) screens. */
+    flex: none;
+    width: 7em;
   }
 
   .drawer {

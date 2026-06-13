@@ -29,9 +29,11 @@ export const CurrencyInputFormik: React.FC<
     currencySymbol: string;
     placeholder: string | undefined;
     disabled?: boolean;
+    className?: string;
   } & FieldProps<string, Values>
 > = (props): JSX.Element => (
   <CurrencyInput
+    className={props.className}
     placeholder={props.placeholder || 'Amount'}
     currencySymbol={props.currencySymbol}
     amount={props.field.value}
@@ -48,14 +50,16 @@ export const CurrencyInput: React.FC<{
   amount: string;
   setValue: (newValue: string) => void;
   disabled?: boolean;
+  className?: string;
 }> = ({
   placeholder,
   currencySymbol,
   amount,
   setValue,
   disabled,
+  className,
 }): JSX.Element => (
-  <InputWithIconWrapper>
+  <InputWithIconWrapper className={className}>
     <InputWithIcon
       placeholder={placeholder}
       disabled={disabled || false}

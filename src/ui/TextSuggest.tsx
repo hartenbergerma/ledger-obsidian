@@ -169,10 +169,14 @@ export const TextSuggest: React.FC<
           <span
             className="ledger-suggest-clear"
             aria-label="Clear"
-            // Use onMouseDown with preventDefault so the input does not blur
-            // (and re-commit the old value) before the field is cleared.
-            onMouseDown={(e) => {
-              e.preventDefault();
+            role="button"
+            // The clear is performed in onClick so it works with both mouse and
+            // touch (mobile webviews do not reliably synthesize mousedown).
+            // preventDefault on pointer/mouse down keeps focus on the input so
+            // it does not blur and re-commit the old value first.
+            onPointerDown={(e) => e.preventDefault()}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
               setVisibility(false);
               commitValue('');
               updateCurrentSuggestions('');
