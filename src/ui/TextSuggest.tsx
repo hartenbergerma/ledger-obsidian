@@ -192,8 +192,12 @@ export const TextSuggest: React.FC<
         <div
           className="suggestion-container"
           ref={setPopperElement}
-          style={styles.popper}
+          style={{ ...styles.popper, maxHeight: '40vh', overflowY: 'auto' }}
           {...attributes.popper}
+          // Stop wheel and touch scroll events from bubbling to the modal so
+          // only the suggestion list scrolls, not the window behind it.
+          onWheel={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
         >
           {currentSuggestions.map((s, i) => (
             <Suggestion
