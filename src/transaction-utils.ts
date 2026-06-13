@@ -1,4 +1,4 @@
-import { EnhancedTransaction } from './parser';
+import { EnhancedExpenseLine, EnhancedTransaction } from './parser';
 import { some } from 'lodash';
 import { Moment } from 'moment';
 
@@ -136,6 +136,45 @@ export const filterByPayeeExact =
   (account: string): Filter =>
   (tx: EnhancedTransaction): boolean =>
     tx.value.payee === account;
+
+/**
+ * getAccountsForPayee returns the (dealiased) account names used in the most
+ * recent transaction with the provided payee, in the order they appear in the
+ * transaction. Comment-only lines are ignored. The most recent transaction is
+ * the one with the latest date, with ties broken by file order (later wins).
+ *
+ * This is used to pre-fill the account fields when a known payee is entered.
+ * It returns all accounts from the transaction so it works correctly even when
+ * a payee was previously used in a transaction with more than two accounts.
+ * If the payee has not been used before, an empty array is returned.
+ */
+export const getAccountsForPayee = (
+  txs: EnhancedTransaction[],
+  payee: string,
+): string[] => {
+  const match = txs.reduce<EnhancedTransaction | undefined>((latest, tx) => {
+    if (tx.value.payee !== payee) {
+      return latest;
+    }
+    if (
+      !latest ||
+      window
+        .moment(tx.value.date)
+        .isSameOrAfter(window.moment(latest.value.date))
+    ) {
+      return tx;
+    }
+    return latest;
+  }, undefined);
+
+  if (!match) {
+    return [];
+  }
+
+  return match.value.expenselines
+    .filter((line): line is EnhancedExpenseLine => 'account' in line)
+    .map((line) => line.dealiasedAccount);
+};
 
 export const filterByStartDate =
   (start: Moment): Filter =>

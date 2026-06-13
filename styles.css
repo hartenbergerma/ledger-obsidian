@@ -2,6 +2,25 @@
 Transaction Entry Modal
 */
 
+/*
+ * On mobile the soft keyboard shrinks the viewport from the bottom, which
+ * pushes a vertically-centred modal out of view. Anchor the modal to the top
+ * of the screen so the form stays visible when the keyboard is open. Obsidian
+ * centres the modal with flexbox on the container, so override the alignment
+ * there; the transform/top overrides cover older centering as well.
+ */
+.is-mobile .modal-container.ledger-modal-container {
+  align-items: flex-start !important;
+}
+
+.is-mobile .ledger-modal {
+  margin-top: 8px;
+  top: 128px !important;
+  transform: none !important;
+  max-height: calc(100vh - 16px) !important;
+  overflow-y: auto !important;
+}
+
 .is-mobile .remove-row {
   margin: 11px 4px 11px 0 !important;
 }
