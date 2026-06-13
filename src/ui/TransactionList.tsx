@@ -292,6 +292,11 @@ const TableStyles = styled.div`
     fill: none;
     stroke: none;
   }
+
+  .ledger-tx-more {
+    width: 100%;
+    margin-top: 8px;
+  }
 `;
 
 interface TableRow {
@@ -381,11 +386,6 @@ export const RecentTransactionList: React.FC<{
       filteredTransactions,
       filterByEndDate(end),
     );
-    // When a chart segment is selected we show every transaction in that
-    // segment; otherwise fall back to the most recent ten.
-    if (!props.segment && filteredTransactions.length > 10) {
-      filteredTransactions = filteredTransactions.slice(-10);
-    }
     return buildTableRows(
       filteredTransactions,
       props.currencySymbol,
@@ -394,11 +394,7 @@ export const RecentTransactionList: React.FC<{
   }, [props.txCache, start, end, props.segment]);
   return (
     <>
-      <h2>
-        {props.segment
-          ? 'Transactions for Selected Period'
-          : 'Last 10 Transactions for Selected Dates'}
-      </h2>
+      <h2>Transactions</h2>
       {props.segment && props.onClearSegment ? (
         <SegmentBanner segment={props.segment} onClear={props.onClearSegment} />
       ) : null}
@@ -455,6 +451,15 @@ export const TransactionList: React.FC<{
 const TransactionTable: React.FC<{
   data: TableRow[];
 }> = ({ data }): JSX.Element => {
+  const pageSize = 20;
+  const [visibleCount, setVisibleCount] = React.useState(pageSize);
+
+  // Reset back to the first page whenever the underlying data changes (e.g. a
+  // different date range or chart segment is selected).
+  React.useEffect(() => {
+    setVisibleCount(pageSize);
+  }, [data]);
+
   const columns = React.useMemo<Column[]>(
     () => [
       {
@@ -512,7 +517,7 @@ const TransactionTable: React.FC<{
           ))}
         </thead>
         <tbody {...getTableBodyProps()}>
-          {rows.map((row) => {
+          {rows.slice(0, visibleCount).map((row) => {
             prepareRow(row);
             return (
               <tr {...row.getRowProps()}>
@@ -524,6 +529,14 @@ const TransactionTable: React.FC<{
           })}
         </tbody>
       </table>
+      {rows.length > visibleCount ? (
+        <button
+          className="ledger-tx-more"
+          onClick={() => setVisibleCount(visibleCount + pageSize)}
+        >
+          Load more
+        </button>
+      ) : null}
     </TableStyles>
   );
 };

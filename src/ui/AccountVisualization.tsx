@@ -17,6 +17,7 @@ import {
 } from './chartInteraction';
 import Chartist, { IBarChartOptions, ILineChartOptions } from 'chartist';
 import { Moment } from 'moment';
+import { Platform } from 'obsidian';
 import React from 'react';
 import ChartistGraph from 'react-chartist';
 import styled from 'styled-components';
@@ -47,9 +48,13 @@ const Legend = styled.div`
   }
 `;
 
-const ChartTypeSelector = styled.div`
+const ChartTypeSelector = styled.div<{ $mobile: boolean }>`
   flex-shrink: 1;
   flex-grow: 0;
+
+  /* Give the balance/profit-and-loss selector a bit of breathing room on
+  mobile, where it sits stacked above the chart. */
+  ${({ $mobile }) => ($mobile ? 'margin: 8px 0 14px;' : '')}
 `;
 
 const Chart = styled.div`
@@ -82,18 +87,10 @@ const Chart = styled.div`
     stroke-width: 12px;
   }
 
-  .ct-bar-label {
+  .ct-bar-label,
+  .ct-point-label {
     fill: var(--text-normal);
     font-size: 0.7rem;
-  }
-`;
-
-const SelectedLabel = styled.div`
-  margin: 4px 0;
-  color: var(--text-normal);
-
-  button {
-    margin-left: 8px;
   }
 `;
 
@@ -126,6 +123,7 @@ export const AccountVisualization: React.FC<{
         accounts={filteredAccounts}
         dateBuckets={dateBuckets}
         interval={props.interval}
+        currencySymbol={props.currencySymbol}
         selectedSegment={props.selectedSegment}
         setSelectedSegment={props.setSelectedSegment}
       />
@@ -146,7 +144,7 @@ export const AccountVisualization: React.FC<{
   return (
     <>
       <ChartHeader>
-        <ChartTypeSelector>
+        <ChartTypeSelector $mobile={Platform.isMobile}>
           <select
             className="dropdown"
             value={mode}
@@ -170,21 +168,6 @@ export const AccountVisualization: React.FC<{
         </Legend>
       </ChartHeader>
 
-      {props.selectedSegment ? (
-        <SelectedLabel>
-          <strong>{props.selectedSegment.label}:</strong>{' '}
-          {formatExactValue(props.selectedSegment.value, props.currencySymbol)}
-          <button onClick={() => props.setSelectedSegment(null)}>Clear</button>
-        </SelectedLabel>
-      ) : (
-        <p>
-          <i>
-            Tip: click a {mode === 'balance' ? 'point' : 'bar'} to see the
-            transactions for that period.
-          </i>
-        </p>
-      )}
-
       <Chart>{visualization}</Chart>
     </>
   );
@@ -196,6 +179,7 @@ const BalanceVisualization: React.FC<{
   accounts: string[];
   dateBuckets: string[];
   interval: Interval;
+  currencySymbol: string;
   selectedSegment: ChartSegment | null;
   setSelectedSegment: (segment: ChartSegment | null) => void;
 }> = (props): JSX.Element => {
@@ -230,6 +214,15 @@ const BalanceVisualization: React.FC<{
     }
     if (props.selectedSegment?.index === dpoint.index) {
       dpoint.element.addClass('ct-point-selected');
+      // Draw the exact value above each series' node at the selected date, so
+      // that with multiple accounts visible each line shows its own value.
+      const label = new Chartist.Svg(
+        'text',
+        { x: dpoint.x, y: dpoint.y - 12, 'text-anchor': 'middle' },
+        'ct-point-label',
+      );
+      label.text(formatExactValue(dpoint.value.y, props.currencySymbol));
+      dpoint.group.append(label);
     }
     const node = dpoint.element.getNode();
     node.addEventListener('click', () => {
@@ -309,18 +302,21 @@ const DeltaVisualization: React.FC<{
     }
 
     // Draw the value of the bar above (or below, for negative values) the bar.
+    // A zero bar means there were no transactions, so we leave it unlabeled.
     const value = dpoint.value.y;
-    const label = new Chartist.Svg(
-      'text',
-      {
-        x: dpoint.x1,
-        y: value >= 0 ? dpoint.y2 - 6 : dpoint.y2 + 14,
-        'text-anchor': 'middle',
-      },
-      'ct-bar-label',
-    );
-    label.text(formatChartValue(value, props.currencySymbol));
-    dpoint.group.append(label);
+    if (value !== 0) {
+      const label = new Chartist.Svg(
+        'text',
+        {
+          x: dpoint.x1,
+          y: value >= 0 ? dpoint.y2 - 6 : dpoint.y2 + 14,
+          'text-anchor': 'middle',
+        },
+        'ct-bar-label',
+      );
+      label.text(formatChartValue(value, props.currencySymbol));
+      dpoint.group.append(label);
+    }
 
     if (props.selectedSegment?.index === dpoint.index) {
       dpoint.element.addClass('ct-bar-selected');

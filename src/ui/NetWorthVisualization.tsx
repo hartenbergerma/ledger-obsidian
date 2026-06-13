@@ -11,7 +11,7 @@ import {
   makeChartSegment,
   useStableListener,
 } from './chartInteraction';
-import { ILineChartOptions } from 'chartist';
+import Chartist, { ILineChartOptions } from 'chartist';
 import { union } from 'lodash';
 import { Moment } from 'moment';
 import React from 'react';
@@ -41,14 +41,10 @@ const Chart = styled.div`
     stroke: var(--interactive-accent);
     stroke-width: 14px;
   }
-`;
 
-const SelectedLabel = styled.div`
-  margin: 4px 0;
-  color: var(--text-normal);
-
-  button {
-    margin-left: 8px;
+  .ct-point-label {
+    fill: var(--text-normal);
+    font-size: 0.7rem;
   }
 `;
 
@@ -104,6 +100,14 @@ export const NetWorthVisualization: React.FC<{
     }
     if (props.selectedSegment?.index === dpoint.index) {
       dpoint.element.addClass('ct-point-selected');
+      // Show the exact value above the selected node, on the graph itself.
+      const label = new Chartist.Svg(
+        'text',
+        { x: dpoint.x, y: dpoint.y - 12, 'text-anchor': 'middle' },
+        'ct-point-label',
+      );
+      label.text(formatExactValue(dpoint.value.y, props.currencySymbol));
+      dpoint.group.append(label);
     }
     const node = dpoint.element.getNode();
     node.addEventListener('click', () => {
@@ -133,18 +137,6 @@ export const NetWorthVisualization: React.FC<{
     <>
       <h2>Net Worth</h2>
       <i>Assets minus liabilities</i>
-
-      {props.selectedSegment ? (
-        <SelectedLabel>
-          <strong>{props.selectedSegment.label}:</strong>{' '}
-          {formatExactValue(props.selectedSegment.value, props.currencySymbol)}
-          <button onClick={() => props.setSelectedSegment(null)}>Clear</button>
-        </SelectedLabel>
-      ) : (
-        <p>
-          <i>Tip: click a point to see the transactions for that period.</i>
-        </p>
-      )}
 
       <Chart>
         <ChartistGraph
