@@ -5,6 +5,12 @@ import {
   makeChartLabelFormatter,
 } from '../date-utils';
 import { TransactionCache } from '../parser';
+import {
+  ChartSegment,
+  formatExactValue,
+  makeChartSegment,
+  useStableListener,
+} from './chartInteraction';
 import { ILineChartOptions } from 'chartist';
 import { union } from 'lodash';
 import { Moment } from 'moment';
@@ -16,6 +22,34 @@ const Chart = styled.div`
   .ct-label {
     color: var(--text-muted);
   }
+
+  /*
+  Make grid lines consistently visible. The Chartist defaults are nearly
+  invisible against the desktop theme and entirely absent on mobile.
+  */
+  .ct-grid {
+    stroke: var(--background-modifier-border);
+    stroke-width: 1px;
+    stroke-dasharray: 2px;
+  }
+
+  .ct-point {
+    cursor: pointer;
+  }
+
+  .ct-point-selected {
+    stroke: var(--interactive-accent);
+    stroke-width: 14px;
+  }
+`;
+
+const SelectedLabel = styled.div`
+  margin: 4px 0;
+  color: var(--text-normal);
+
+  button {
+    margin-left: 8px;
+  }
 `;
 
 export const NetWorthVisualization: React.FC<{
@@ -24,6 +58,9 @@ export const NetWorthVisualization: React.FC<{
   endDate: Moment;
   interval: Interval;
   txCache: TransactionCache;
+  currencySymbol: string;
+  selectedSegment: ChartSegment | null;
+  setSelectedSegment: (segment: ChartSegment | null) => void;
 }> = (props): JSX.Element => {
   const dateBuckets = makeBucketNames(
     props.interval,
@@ -61,14 +98,61 @@ export const NetWorthVisualization: React.FC<{
     },
   };
 
-  const type = 'Line';
+  const listener = useStableListener((dpoint) => {
+    if (dpoint.type !== 'point') {
+      return;
+    }
+    if (props.selectedSegment?.index === dpoint.index) {
+      dpoint.element.addClass('ct-point-selected');
+    }
+    const node = dpoint.element.getNode();
+    node.addEventListener('click', () => {
+      if (props.selectedSegment?.index === dpoint.index) {
+        props.setSelectedSegment(null);
+        return;
+      }
+      // The first point has no preceding bucket within the range, so use the
+      // day before so that selecting it shows transactions on that opening day.
+      const previousBoundary =
+        dpoint.index > 0
+          ? window.moment(dateBuckets[dpoint.index - 1])
+          : window.moment(dateBuckets[0]).subtract(1, 'day');
+      props.setSelectedSegment(
+        makeChartSegment(
+          dateBuckets,
+          dpoint.index,
+          previousBoundary,
+          dpoint.value.y,
+          props.interval,
+        ),
+      );
+    });
+  });
+
   return (
     <>
       <h2>Net Worth</h2>
       <i>Assets minus liabilities</i>
 
+      {props.selectedSegment ? (
+        <SelectedLabel>
+          <strong>{props.selectedSegment.label}:</strong>{' '}
+          {formatExactValue(props.selectedSegment.value, props.currencySymbol)}
+          <button onClick={() => props.setSelectedSegment(null)}>Clear</button>
+        </SelectedLabel>
+      ) : (
+        <p>
+          <i>Tip: click a point to see the transactions for that period.</i>
+        </p>
+      )}
+
       <Chart>
-        <ChartistGraph data={data} options={options} type={type} />
+        <ChartistGraph
+          data={data}
+          options={options}
+          type="Line"
+          listener={listener}
+        />
       </Chart>
     </>
   );

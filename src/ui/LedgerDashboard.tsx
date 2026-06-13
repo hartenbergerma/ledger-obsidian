@@ -8,6 +8,7 @@ import type { TransactionCache } from '../parser';
 import { ISettings } from '../settings';
 import { AccountsList } from './AccountsList';
 import { AccountVisualization } from './AccountVisualization';
+import { ChartSegment } from './chartInteraction';
 import { DateRangeSelector } from './DateRangeSelector';
 import { NetWorthVisualization } from './NetWorthVisualization';
 import { ParseErrors } from './ParseErrors';
@@ -135,6 +136,14 @@ const MobileDashboard: React.FC<{
     useDateRange(props.txCache, 'month');
   const [selectedAccounts, setSelectedAccounts] = React.useState<string[]>([]);
   const [accountsExpanded, setAccountsExpanded] = React.useState(false);
+  const [selectedSegment, setSelectedSegment] =
+    React.useState<ChartSegment | null>(null);
+
+  // A selected chart segment refers to a specific point/bar, so it stops being
+  // meaningful once the date range or the set of accounts changes.
+  React.useEffect(() => {
+    setSelectedSegment(null);
+  }, [dateRange, selectedAccounts]);
 
   return (
     <MobileStyles>
@@ -174,6 +183,9 @@ const MobileDashboard: React.FC<{
           endDate={endDate}
           interval={interval}
           txCache={props.txCache}
+          currencySymbol={props.settings.currencySymbol}
+          selectedSegment={selectedSegment}
+          setSelectedSegment={setSelectedSegment}
         />
       ) : (
         <AccountVisualization
@@ -183,6 +195,9 @@ const MobileDashboard: React.FC<{
           startDate={startDate}
           endDate={endDate}
           interval={interval}
+          currencySymbol={props.settings.currencySymbol}
+          selectedSegment={selectedSegment}
+          setSelectedSegment={setSelectedSegment}
         />
       )}
 
@@ -194,6 +209,8 @@ const MobileDashboard: React.FC<{
         selectedAccounts={selectedAccounts}
         startDate={startDate}
         endDate={endDate}
+        segment={selectedSegment}
+        onClearSegment={() => setSelectedSegment(null)}
       />
     </MobileStyles>
   );
@@ -210,6 +227,14 @@ const DesktopDashboard: React.FC<{
   const { dateRange, setDateRange, startDate, endDate, interval } =
     useDateRange(props.txCache, 'month');
   const [selectedAccounts, setSelectedAccounts] = React.useState<string[]>([]);
+  const [selectedSegment, setSelectedSegment] =
+    React.useState<ChartSegment | null>(null);
+
+  // A selected chart segment refers to a specific point/bar, so it stops being
+  // meaningful once the date range or the set of accounts changes.
+  React.useEffect(() => {
+    setSelectedSegment(null);
+  }, [dateRange, selectedAccounts]);
 
   return (
     <>
@@ -249,6 +274,9 @@ const DesktopDashboard: React.FC<{
                 endDate={endDate}
                 interval={interval}
                 txCache={props.txCache}
+                currencySymbol={props.settings.currencySymbol}
+                selectedSegment={selectedSegment}
+                setSelectedSegment={setSelectedSegment}
               />
               <RecentTransactionList
                 currencySymbol={props.settings.currencySymbol}
@@ -256,6 +284,8 @@ const DesktopDashboard: React.FC<{
                 updater={props.updater}
                 startDate={startDate}
                 endDate={endDate}
+                segment={selectedSegment}
+                onClearSegment={() => setSelectedSegment(null)}
               />
             </>
           ) : (
@@ -267,6 +297,9 @@ const DesktopDashboard: React.FC<{
                 startDate={startDate}
                 endDate={endDate}
                 interval={interval}
+                currencySymbol={props.settings.currencySymbol}
+                selectedSegment={selectedSegment}
+                setSelectedSegment={setSelectedSegment}
               />
               <TransactionList
                 currencySymbol={props.settings.currencySymbol}
@@ -278,6 +311,8 @@ const DesktopDashboard: React.FC<{
                 }
                 startDate={startDate}
                 endDate={endDate}
+                segment={selectedSegment}
+                onClearSegment={() => setSelectedSegment(null)}
               />
             </>
           )}
