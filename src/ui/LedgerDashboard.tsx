@@ -138,7 +138,11 @@ const MobileDashboard: React.FC<{
 
   return (
     <MobileStyles>
-      <DateRangeSelector range={dateRange} setRange={setDateRange} />
+      <DateRangeSelector
+        range={dateRange}
+        setRange={setDateRange}
+        firstDate={props.txCache.firstDate}
+      />
 
       <button
         className="ledger-mobile-account-toggle"
@@ -154,6 +158,8 @@ const MobileDashboard: React.FC<{
           txCache={props.txCache}
           selectedAccounts={selectedAccounts}
           setSelectedAccounts={setSelectedAccounts}
+          dailyAccountBalanceMap={dailyAccountBalanceMap}
+          currencySymbol={props.settings.currencySymbol}
         />
       ) : null}
 
@@ -208,7 +214,11 @@ const DesktopDashboard: React.FC<{
   return (
     <>
       <Header>
-        <DateRangeSelector range={dateRange} setRange={setDateRange} />
+        <DateRangeSelector
+          range={dateRange}
+          setRange={setDateRange}
+          firstDate={props.txCache.firstDate}
+        />
         {props.tutorialIndex !== -1 ? (
           <Tutorial
             tutorialIndex={props.tutorialIndex}
@@ -223,6 +233,8 @@ const DesktopDashboard: React.FC<{
             txCache={props.txCache}
             selectedAccounts={selectedAccounts}
             setSelectedAccounts={setSelectedAccounts}
+            dailyAccountBalanceMap={dailyAccountBalanceMap}
+            currencySymbol={props.settings.currencySymbol}
           />
         </FlexSidebar>
         <FlexMainContent>

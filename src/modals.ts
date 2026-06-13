@@ -3,11 +3,61 @@ import LedgerPlugin from './main';
 import { EnhancedTransaction } from './parser';
 import { emptyTransaction } from './transaction-utils';
 import { EditTransaction } from './ui/EditTransaction';
-import { Modal } from 'obsidian';
+import { App, Modal } from 'obsidian';
 import React from 'react';
 import ReactDOM from 'react-dom';
 
 export type Operation = 'new' | 'clone' | 'modify';
+
+/**
+ * ConfirmModal presents a simple confirmation dialog with a cancel and a
+ * confirm button. The provided callback is only invoked if the user clicks the
+ * confirm button.
+ */
+export class ConfirmModal extends Modal {
+  private readonly titleText: string;
+  private readonly bodyText: string;
+  private readonly confirmText: string;
+  private readonly onConfirm: () => void;
+
+  constructor(
+    app: App,
+    titleText: string,
+    bodyText: string,
+    confirmText: string,
+    onConfirm: () => void,
+  ) {
+    super(app);
+    this.titleText = titleText;
+    this.bodyText = bodyText;
+    this.confirmText = confirmText;
+    this.onConfirm = onConfirm;
+  }
+
+  public onOpen = (): void => {
+    this.titleEl.setText(this.titleText);
+    this.contentEl.createEl('p', { text: this.bodyText });
+
+    const buttonContainer = this.contentEl.createDiv({
+      cls: 'modal-button-container',
+    });
+    const cancelButton = buttonContainer.createEl('button', { text: 'Cancel' });
+    cancelButton.addEventListener('click', () => this.close());
+
+    const confirmButton = buttonContainer.createEl('button', {
+      text: this.confirmText,
+      cls: 'mod-warning',
+    });
+    confirmButton.addEventListener('click', () => {
+      this.onConfirm();
+      this.close();
+    });
+  };
+
+  public onClose = (): void => {
+    this.contentEl.empty();
+  };
+}
 
 export class AddExpenseModal extends Modal {
   private readonly plugin: LedgerPlugin;

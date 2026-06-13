@@ -5,8 +5,21 @@ import {
   Node,
   sortAccountTree,
 } from '../transaction-utils';
+import { Platform } from 'obsidian';
 import React from 'react';
-import styled from 'styled-components';
+import styled, { css } from 'styled-components';
+
+const ListContainer = styled.div<{ mobile: boolean }>`
+  ${(props) =>
+    props.mobile &&
+    css`
+      /* Larger tap targets so accounts are easier to select on mobile. */
+      .ledger-account-name {
+        padding-top: 10px;
+        padding-bottom: 10px;
+      }
+    `}
+`;
 
 const TreeRow = styled.div`
   margin-right: 10px;
@@ -20,11 +33,29 @@ const TreeRow = styled.div`
 
 const AccountName = styled.span`
   flex-grow: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
   margin-bottom: 2px;
   padding: 1px 6px;
 
+  /*
+  Prevent the account name text from being selected when dragging, which on
+  mobile hijacks the touch gesture and breaks scrolling through the list.
+  */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+
   :hover {
     background-color: var(--background-primary-alt);
+  }
+
+  .ledger-account-balance {
+    flex-shrink: 0;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
   }
 `;
 
@@ -32,7 +63,42 @@ const Expander = styled.span`
   flex-grow: 0;
   display: inline-block;
   width: 15px;
+  user-select: none;
+  -webkit-user-select: none;
 `;
+
+/**
+ * useCurrentBalances aggregates the most recent balance for every account
+ * (including the rolled-up balance of its sub-accounts) into a single lookup
+ * keyed by the full dealiased account name.
+ */
+const useCurrentBalances = (
+  dailyAccountBalanceMap: Map<string, Map<string, number>>,
+): Map<string, number> =>
+  React.useMemo(() => {
+    const aggregated = new Map<string, number>();
+    const dates = [...dailyAccountBalanceMap.keys()];
+    if (dates.length === 0) {
+      return aggregated;
+    }
+
+    const latest = dailyAccountBalanceMap.get(dates[dates.length - 1]);
+    if (!latest) {
+      return aggregated;
+    }
+
+    latest.forEach((balance, account) => {
+      // Add this balance to the account and each of its parents so that parent
+      // accounts display the total of their children.
+      let prefix = '';
+      account.split(':').forEach((segment) => {
+        prefix = prefix ? `${prefix}:${segment}` : segment;
+        aggregated.set(prefix, (aggregated.get(prefix) || 0) + balance);
+      });
+    });
+
+    return aggregated;
+  }, [dailyAccountBalanceMap]);
 
 const Tree: React.FC<{
   txCache: TransactionCache;
@@ -40,6 +106,8 @@ const Tree: React.FC<{
   depth: number;
   selectedAccounts: string[];
   setSelectedAccounts: React.Dispatch<React.SetStateAction<string[]>>;
+  balances: Map<string, number>;
+  currencySymbol: string;
 }> = (props): JSX.Element => {
   const [expanded, setExpanded] = React.useState(props.data.expanded || false);
   const subRows = props.data.subRows;
@@ -54,6 +122,7 @@ const Tree: React.FC<{
 
   const id = props.data.id;
   const selected = props.selectedAccounts.contains(id);
+  const balance = props.balances.get(id);
   const toggleSelected = (): void => {
     if (selected) {
       props.setSelectedAccounts(
@@ -85,10 +154,16 @@ const Tree: React.FC<{
           <Expander />
         )}
         <AccountName
-          className={selected ? 'selected' : ''}
+          className={`ledger-account-name${selected ? ' selected' : ''}`}
           onClick={toggleSelected}
         >
-          {props.data.account}
+          <span>{props.data.account}</span>
+          {balance !== undefined ? (
+            <span className="ledger-account-balance">
+              {props.currencySymbol}
+              {balance.toFixed(2)}
+            </span>
+          ) : null}
         </AccountName>
       </TreeRow>
       {hasChildren && expanded && subRows
@@ -100,6 +175,8 @@ const Tree: React.FC<{
               depth={props.depth + 1}
               selectedAccounts={props.selectedAccounts}
               setSelectedAccounts={props.setSelectedAccounts}
+              balances={props.balances}
+              currencySymbol={props.currencySymbol}
             />
           ))
         : null}
@@ -111,6 +188,8 @@ export const AccountsList: React.FC<{
   txCache: TransactionCache;
   selectedAccounts: string[];
   setSelectedAccounts: React.Dispatch<React.SetStateAction<string[]>>;
+  dailyAccountBalanceMap: Map<string, Map<string, number>>;
+  currencySymbol: string;
 }> = (props): JSX.Element => {
   const data = React.useMemo(() => {
     const nodes: Node[] = [];
@@ -124,8 +203,10 @@ export const AccountsList: React.FC<{
     return nodes;
   }, [props.txCache]);
 
+  const balances = useCurrentBalances(props.dailyAccountBalanceMap);
+
   return (
-    <div className="ledger-account-list">
+    <ListContainer className="ledger-account-list" mobile={Platform.isMobile}>
       {data.map((root) => (
         <Tree
           txCache={props.txCache}
@@ -134,8 +215,10 @@ export const AccountsList: React.FC<{
           depth={0}
           selectedAccounts={props.selectedAccounts}
           setSelectedAccounts={props.setSelectedAccounts}
+          balances={balances}
+          currencySymbol={props.currencySymbol}
         />
       ))}
-    </div>
+    </ListContainer>
   );
 };

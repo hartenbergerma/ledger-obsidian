@@ -17,8 +17,8 @@ import { Column, useFilters, useSortBy, useTable } from 'react-table';
 import styled from 'styled-components';
 
 /**
- * TransactionActions renders the edit, clone and delete buttons for a
- * transaction. The styling of the icons is left to the parent component.
+ * TransactionActions renders the edit and delete buttons for a transaction.
+ * The styling of the icons is left to the parent component.
  */
 const TransactionActions: React.FC<{
   tx: EnhancedTransaction;
@@ -41,21 +41,7 @@ const TransactionActions: React.FC<{
       />
     </svg>
     <svg
-      onClick={() => {
-        updater.openExpenseModal('clone', tx);
-      }}
-      width="16"
-      height="16"
-      version="1.1"
-      viewBox="0 0 28 28"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path d="m2 2h16v4h2v-4c0-1.1046-0.89543-2-2-2h-16c-1.1046 0-2 0.89543-2 2v16c0 1.1046 0.89543 2 2 2h4v-2h-4z" />
-      <path d="m26 8h-16c-1.1046 0-2 0.89543-2 2v16c0 1.1046 0.89543 2 2 2h16c1.1046 0 2-0.89543 2-2v-16c0-1.1046-0.89543-2-2-2zm0 18h-16v-16h16z" />
-      <path d="m17 24h2v-5h5v-2h-5v-5h-2v5h-5v2h5z" />
-    </svg>
-    <svg
-      onClick={() => updater.deleteTransaction(tx)}
+      onClick={() => updater.promptDeleteTransaction(tx)}
       width="16"
       height="16"
       version="1.1"

@@ -63,6 +63,51 @@ export const resolveDateRange = (
 };
 
 /**
+ * isDateRangeAvailable determines whether a named date range is worth offering
+ * given the date of the oldest transaction. A "Last ..." range is only useful
+ * when there is data older than the start of that range; otherwise it would
+ * show exactly the same data as a shorter range or "All Time". The 'all' range
+ * is always available.
+ */
+export const isDateRangeAvailable = (
+  range: DateRange,
+  firstTxDate: Moment,
+  now: Moment = window.moment(),
+): boolean => {
+  let rangeStart: Moment;
+  switch (range) {
+    case 'week':
+      rangeStart = now.clone().subtract(1, 'week');
+      break;
+    case 'month':
+      rangeStart = now.clone().subtract(1, 'month');
+      break;
+    case '6months':
+      rangeStart = now.clone().subtract(6, 'months');
+      break;
+    case 'year':
+      rangeStart = now.clone().subtract(1, 'year');
+      break;
+    case 'all':
+      return true;
+  }
+  return firstTxDate.isBefore(rangeStart);
+};
+
+/**
+ * availableDateRangeOptions returns the subset of dateRangeOptions which are
+ * meaningful for the provided oldest transaction date. "All Time" is always
+ * included.
+ */
+export const availableDateRangeOptions = (
+  firstTxDate: Moment,
+  now: Moment = window.moment(),
+): { id: DateRange; label: string }[] =>
+  dateRangeOptions.filter(({ id }) =>
+    isDateRangeAvailable(id, firstTxDate, now),
+  );
+
+/**
  * makeChartLabelFormatter creates a chartist label interpolation function
  * which formats bucket names for the provided interval and skips labels when
  * there are too many buckets to remain readable.
@@ -87,10 +132,6 @@ export const makeBucketNames = (
   startDate: Moment,
   endDate: Moment,
 ): string[] => {
-  // TODO: We need to make sure the end of the range is captured. Right now it
-  // seems there is either bug here or where we put data into the buckets which
-  // is preventing all the transactions from being represented in the chart.
-
   const names: string[] = [];
   const currentDate = startDate.clone();
 
@@ -98,6 +139,16 @@ export const makeBucketNames = (
     names.push(currentDate.format('YYYY-MM-DD'));
     currentDate.add(1, interval);
   } while (currentDate.isSameOrBefore(endDate));
+
+  // Always include the end of the range as the final bucket. When the range
+  // does not divide evenly into the interval, the last generated bucket falls
+  // before the end date. Previously this caused transactions occurring after
+  // that bucket (e.g. in the most recent days) to be omitted from the chart,
+  // even though they appeared in the transaction list below.
+  const endName = endDate.format('YYYY-MM-DD');
+  if (names[names.length - 1] !== endName) {
+    names.push(endName);
+  }
 
   return names;
 };
