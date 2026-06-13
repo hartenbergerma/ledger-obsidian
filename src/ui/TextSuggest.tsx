@@ -2,6 +2,7 @@ import { Values } from './EditTransaction';
 import { FieldProps } from 'formik';
 import Fuse from 'fuse.js';
 import React from 'react';
+import ReactDOM from 'react-dom';
 import { usePopper } from 'react-popper';
 import styled from 'styled-components';
 
@@ -74,6 +75,9 @@ export const TextSuggest: React.FC<
   const inputRef = React.useRef<HTMLInputElement | null>(null);
   const { styles, attributes } = usePopper(referenceElement, popperElement, {
     placement: 'bottom-start',
+    // Use the fixed strategy and render in a portal (see below) so the
+    // suggestion list floats above the modal instead of being clipped by it.
+    strategy: 'fixed',
   });
 
   const updateCurrentSuggestions = (newValue: string): void => {
@@ -188,33 +192,44 @@ export const TextSuggest: React.FC<
         ) : null}
       </InputWrapper>
 
-      {visible ? (
-        <div
-          className="suggestion-container"
-          ref={setPopperElement}
-          style={{ ...styles.popper, maxHeight: '40vh', overflowY: 'auto' }}
-          {...attributes.popper}
-          // Stop wheel and touch scroll events from bubbling to the modal so
-          // only the suggestion list scrolls, not the window behind it.
-          onWheel={(e) => e.stopPropagation()}
-          onTouchMove={(e) => e.stopPropagation()}
-        >
-          {currentSuggestions.map((s, i) => (
-            <Suggestion
-              value={s}
-              key={s}
-              selected={i === selectedIndex}
-              onClick={() => {
-                commitValue(s);
-                setVisibility(false);
+      {visible
+        ? ReactDOM.createPortal(
+            <div
+              className="suggestion-container"
+              ref={setPopperElement}
+              style={{
+                ...styles.popper,
+                // Cap the list at roughly five entries and scroll internally
+                // for the rest.
+                maxHeight: '14em',
+                overflowY: 'auto',
+                // Float above the modal (same layer Obsidian uses for menus).
+                zIndex: 'var(--layer-menu, 9999)',
               }}
-              onHover={() => {
-                setSelectedIndex(i);
-              }}
-            />
-          ))}
-        </div>
-      ) : null}
+              {...attributes.popper}
+              // Stop wheel and touch scroll events from bubbling to the modal so
+              // only the suggestion list scrolls, not the window behind it.
+              onWheel={(e) => e.stopPropagation()}
+              onTouchMove={(e) => e.stopPropagation()}
+            >
+              {currentSuggestions.map((s, i) => (
+                <Suggestion
+                  value={s}
+                  key={s}
+                  selected={i === selectedIndex}
+                  onClick={() => {
+                    commitValue(s);
+                    setVisibility(false);
+                  }}
+                  onHover={() => {
+                    setSelectedIndex(i);
+                  }}
+                />
+              ))}
+            </div>,
+            document.body,
+          )
+        : null}
     </>
   );
 };

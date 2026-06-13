@@ -301,6 +301,7 @@ const Warning = styled.div`
 const FormStyles = styled.div`
   .flexRow {
     display: flex;
+    align-items: center;
   }
 
   .flexGrow {
@@ -310,7 +311,17 @@ const FormStyles = styled.div`
   }
 
   .flexShrink {
-    flex-shrink 1;
+    flex-shrink: 1;
+  }
+
+  /* The date only needs enough room for the date itself, not half the row. */
+  .dateField {
+    flex: 0 0 auto;
+  }
+
+  .dateField input {
+    width: auto;
+    max-width: 100%;
   }
 
   .splitButtons {
@@ -620,7 +631,7 @@ export const EditTransaction: React.FC<{
                     <ErrorMessage name="total" component="div" />
                   </Margin>
                   <Margin className="flexShrink">on</Margin>
-                  <Margin className="flexGrow">
+                  <Margin className="dateField">
                     <Field type="date" name="date" />
                     <ErrorMessage name="date" component="div" />
                   </Margin>

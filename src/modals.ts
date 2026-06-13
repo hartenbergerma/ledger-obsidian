@@ -79,6 +79,11 @@ export class AddExpenseModal extends Modal {
   }
 
   public onOpen = (): void => {
+    // Scoped classes so the mobile positioning overrides in styles.css only
+    // affect this modal.
+    this.modalEl.addClass('ledger-modal');
+    this.containerEl.addClass('ledger-modal-container');
+
     ReactDOM.render(
       React.createElement(EditTransaction, {
         displayFileWarning:
