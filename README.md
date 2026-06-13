@@ -14,6 +14,13 @@ safely in your Obsidian Vault instead.
   - Accounts declared with [`account` directives](https://hledger.org/hledger.html#account)
     are suggested as well, and `type:` tags (e.g. `account Cash ; type: A`)
     are used to categorize accounts for the expense, income, and transfer forms.
+  - Liability accounts are also suggested in the expense and income fields, and
+    additional "Add Split" lines suggest every account so you can enter more
+    complex transactions.
+  - Selecting a payee that has been used before automatically fills in the
+    account fields based on the most recently used accounts for that payee. Use
+    the "Set as default for Payee" button to remember a specific set of accounts
+    for a payee instead.
 - [x] Obsidian Protocol handling to quickly launch Obsidian and immediately record a transaction
   - Create a Shortcut on mobile to `obsidian://ledger`
 - [x] Dashboard with net-worth and account visualizations, on desktop and mobile.

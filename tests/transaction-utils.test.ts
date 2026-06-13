@@ -5,6 +5,7 @@ import {
   filterByPayeeExact,
   filterTransactions,
   formatTransaction,
+  getAccountsForPayee,
   getCurrency,
   getTotal,
   makeAccountTree,
@@ -483,5 +484,89 @@ describe('filterTransactions', () => {
       );
       expect(result).toEqual([tx2, tx3]);
     });
+  });
+});
+
+describe('getAccountsForPayee()', () => {
+  test('When the payee has not been used before', () => {
+    const contents = `2021-01-01 Starbucks
+    Expenses:Food:Coffee    $5.00
+    Assets:Checking`;
+    const txCache = parse(contents, settingsWithDefaults({}));
+    expect(txCache.parsingErrors).toEqual([]);
+    expect(getAccountsForPayee(txCache.transactions, 'Unknown')).toEqual([]);
+  });
+
+  test('Returns the accounts in order for a simple transaction', () => {
+    const contents = `2021-01-01 Starbucks
+    Expenses:Food:Coffee    $5.00
+    Assets:Checking`;
+    const txCache = parse(contents, settingsWithDefaults({}));
+    expect(txCache.parsingErrors).toEqual([]);
+    expect(getAccountsForPayee(txCache.transactions, 'Starbucks')).toEqual([
+      'Expenses:Food:Coffee',
+      'Assets:Checking',
+    ]);
+  });
+
+  test('Returns all accounts when more than two are involved', () => {
+    const contents = `2021-03-01 Paycheck
+    Assets:Checking    $1000.00
+    Income:Salary    $-800.00
+    Liabilities:Loan    $-200.00`;
+    const txCache = parse(contents, settingsWithDefaults({}));
+    expect(txCache.parsingErrors).toEqual([]);
+    expect(getAccountsForPayee(txCache.transactions, 'Paycheck')).toEqual([
+      'Assets:Checking',
+      'Income:Salary',
+      'Liabilities:Loan',
+    ]);
+  });
+
+  test('Returns the accounts from the most recent transaction', () => {
+    const contents = `2021-01-01 Starbucks
+    Expenses:Food:Coffee    $5.00
+    Assets:Checking
+
+2021-06-01 Starbucks
+    Expenses:Food:Coffee    $4.00
+    Liabilities:Visa`;
+    const txCache = parse(contents, settingsWithDefaults({}));
+    expect(txCache.parsingErrors).toEqual([]);
+    expect(getAccountsForPayee(txCache.transactions, 'Starbucks')).toEqual([
+      'Expenses:Food:Coffee',
+      'Liabilities:Visa',
+    ]);
+  });
+
+  test('Most recent is by date, not file order', () => {
+    const contents = `2021-06-01 Starbucks
+    Expenses:Food:Coffee    $4.00
+    Liabilities:Visa
+
+2021-01-01 Starbucks
+    Expenses:Food:Coffee    $5.00
+    Assets:Checking`;
+    const txCache = parse(contents, settingsWithDefaults({}));
+    expect(txCache.parsingErrors).toEqual([]);
+    expect(getAccountsForPayee(txCache.transactions, 'Starbucks')).toEqual([
+      'Expenses:Food:Coffee',
+      'Liabilities:Visa',
+    ]);
+  });
+
+  test('Returns dealiased account names', () => {
+    const contents = `alias e=Expenses
+alias b=Assets:Banking
+
+2021-02-01 Aliased
+    e:Food    $10.00
+    b:Main`;
+    const txCache = parse(contents, settingsWithDefaults({}));
+    expect(txCache.parsingErrors).toEqual([]);
+    expect(getAccountsForPayee(txCache.transactions, 'Aliased')).toEqual([
+      'Expenses:Food',
+      'Assets:Banking:Main',
+    ]);
   });
 });

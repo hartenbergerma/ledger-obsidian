@@ -5,7 +5,11 @@ import {
   EnhancedTransaction,
   TransactionCache,
 } from '../parser';
-import { formatTransaction, getTotalAsNum } from '../transaction-utils';
+import {
+  formatTransaction,
+  getAccountsForPayee,
+  getTotalAsNum,
+} from '../transaction-utils';
 import { CurrencyInputFormik } from './CurrencyInput';
 import { TextSuggest } from './TextSuggest';
 import {
@@ -155,9 +159,17 @@ const ExpenseLine: React.FC<{
   currencySymbol: string;
 }> = ({ i, formik, ...props }): JSX.Element => {
   const lines = formik.values.lines;
+  const lastI = lines.length - 1;
+
+  // A "split" line is any line added between the first and last lines (e.g. via
+  // the "Add Split" button). These support more complicated transactions, so
+  // any type of account may be entered.
+  const isSplit = i !== 0 && i !== lastI;
 
   const getAccountName = (): string => {
-    const lastI = lines.length - 1;
+    if (isSplit) {
+      return 'Split';
+    }
     switch (formik.values.txType) {
       case 'expense':
         return i !== lastI ? 'Expense' : 'Asset';
@@ -173,6 +185,17 @@ const ExpenseLine: React.FC<{
     props.txCache.assetAccounts,
     props.txCache.liabilityAccounts,
   );
+  // Liabilities are suggested alongside expense and income accounts so that,
+  // for example, paying down a credit card or recording a refund can be entered
+  // directly into the expense/income field.
+  const expensesAndLiabilities = union(
+    props.txCache.expenseAccounts,
+    props.txCache.liabilityAccounts,
+  );
+  const incomeAndLiabilities = union(
+    props.txCache.incomeAccounts,
+    props.txCache.liabilityAccounts,
+  );
 
   // If no accounts could be categorized (e.g. account types are not declared
   // in the ledger file and the account prefixes in the plugin settings do not
@@ -181,15 +204,18 @@ const ExpenseLine: React.FC<{
     accounts.length > 0 ? accounts : props.txCache.accounts;
 
   const getSuggestions = (): string[] => {
-    const lastI = lines.length - 1;
+    if (isSplit) {
+      // Split lines may be any type of account.
+      return props.txCache.accounts;
+    }
     switch (formik.values.txType) {
       case 'expense':
         return orAllAccounts(
-          i !== lastI ? props.txCache.expenseAccounts : assetsAndLiabilities,
+          i !== lastI ? expensesAndLiabilities : assetsAndLiabilities,
         );
       case 'income':
         return orAllAccounts(
-          i !== lastI ? assetsAndLiabilities : props.txCache.incomeAccounts,
+          i !== lastI ? assetsAndLiabilities : incomeAndLiabilities,
         );
       case 'transfer':
         return orAllAccounts(assetsAndLiabilities);
@@ -285,6 +311,12 @@ const FormStyles = styled.div`
     flex-shrink 1;
   }
 
+  .splitButtons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
   input {
     width: 100%;
   }
@@ -334,10 +366,85 @@ export const EditTransaction: React.FC<{
   operation: Operation;
   updater: LedgerModifier;
   txCache: TransactionCache;
+  payeeAccountDefaults: Record<string, string[]>;
+  savePayeeAccountDefault: (payee: string, accounts: string[]) => void;
   close: () => void;
 }> = (props): JSX.Element => {
   const isNew = props.operation === 'new';
   const [page, setPage] = React.useState(1);
+
+  // Local copy of the payee account defaults so that defaults set during this
+  // session are reflected immediately by the auto-fill.
+  const [payeeDefaults, setPayeeDefaults] = React.useState(
+    props.payeeAccountDefaults,
+  );
+
+  // Tracks the payee that the account fields were last auto-filled for, so that
+  // simply re-focusing the payee field does not clobber edits the user has
+  // made. It is initialized to the starting payee so that opening an existing
+  // transaction does not immediately overwrite its accounts.
+  const lastAutofilledPayee = React.useRef<string>(
+    isNew ? '' : props.initialState.value.payee,
+  );
+
+  /**
+   * applyPayeeAccountDefaults pre-fills the account fields based on the
+   * accounts most recently used with the provided payee (or an explicit default
+   * set with "Set as default for Payee"). Only applies to new transactions and
+   * only when the payee actually changes.
+   */
+  const applyPayeeAccountDefaults = (
+    formik: FormikProps<Values>,
+    payee: string,
+  ): void => {
+    if (!isNew || payee === '' || payee === lastAutofilledPayee.current) {
+      return;
+    }
+    lastAutofilledPayee.current = payee;
+
+    const accounts =
+      payeeDefaults[payee] ??
+      getAccountsForPayee(props.txCache.transactions, payee);
+    if (accounts.length === 0) {
+      return;
+    }
+
+    // Always keep at least two lines, and create extra lines if the payee was
+    // previously used with more than two accounts.
+    const count = Math.max(accounts.length, 2);
+    const newLines: Line[] = Array.from(
+      { length: count },
+      (_unused, idx): Line => ({
+        id: idx,
+        account: accounts[idx] || '',
+        amount: '',
+        comment: '',
+        reconcile: '',
+      }),
+    );
+    formik.setFieldValue('lines', newLines);
+  };
+
+  /**
+   * setDefaultForPayee stores the accounts currently entered in the form as the
+   * default for the current payee. Trailing empty lines are dropped so that,
+   * when only one of the income/expense accounts is set, just that account is
+   * stored.
+   */
+  const setDefaultForPayee = (formik: FormikProps<Values>): void => {
+    const accounts = formik.values.lines.map((line) => line.account);
+    while (accounts.length > 0 && accounts[accounts.length - 1] === '') {
+      accounts.pop();
+    }
+    if (accounts.every((account) => account === '')) {
+      return; // Nothing meaningful to store.
+    }
+
+    setPayeeDefaults({ ...payeeDefaults, [formik.values.payee]: accounts });
+    props.savePayeeAccountDefault(formik.values.payee, accounts);
+    // Avoid the next payee blur re-filling and discarding the entered amounts.
+    lastAutofilledPayee.current = formik.values.payee;
+  };
 
   const initialValues: Values = {
     payee: isNew ? '' : props.initialState.value.payee,
@@ -523,6 +630,9 @@ export const EditTransaction: React.FC<{
                       name="payee"
                       placeholder="Payee (e.g. Obsidian.md)"
                       suggestions={props.txCache.payees}
+                      onSelectValue={(payee: string) =>
+                        applyPayeeAccountDefaults(formik, payee)
+                      }
                     />
                     <ErrorMessage name="payee" component="div" />
                   </Margin>
@@ -544,25 +654,35 @@ export const EditTransaction: React.FC<{
                           currencySymbol={props.currencySymbol}
                         />
                       ))}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const prevMaxID = formik.values.lines.reduce(
-                            (max, line) => Math.max(max, line.id),
-                            -1,
-                          );
-                          const newLine: Line = {
-                            id: prevMaxID + 1,
-                            account: '',
-                            amount: '',
-                            comment: '',
-                            reconcile: '',
-                          };
-                          insert(formik.values.lines.length - 1, newLine);
-                        }}
-                      >
-                        Add Split
-                      </button>
+                      <div className="splitButtons">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const prevMaxID = formik.values.lines.reduce(
+                              (max, line) => Math.max(max, line.id),
+                              -1,
+                            );
+                            const newLine: Line = {
+                              id: prevMaxID + 1,
+                              account: '',
+                              amount: '',
+                              comment: '',
+                              reconcile: '',
+                            };
+                            insert(formik.values.lines.length - 1, newLine);
+                          }}
+                        >
+                          Add Split
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDefaultForPayee(formik)}
+                          disabled={formik.values.payee === ''}
+                          title="Save the current accounts as the default for this payee"
+                        >
+                          Set as default for Payee
+                        </button>
+                      </div>
                     </>
                   )}
                 </FieldArray>
