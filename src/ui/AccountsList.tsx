@@ -1,3 +1,4 @@
+import { calcNetWorth } from '../balance-utils';
 import type { TransactionCache } from '../parser';
 import {
   dealiasAccount,
@@ -5,6 +6,7 @@ import {
   Node,
   sortAccountTree,
 } from '../transaction-utils';
+import { union } from 'lodash';
 import { Platform } from 'obsidian';
 import React from 'react';
 import styled, { css } from 'styled-components';
@@ -41,10 +43,6 @@ const TreeRow = styled.div`
   margin-right: 10px;
   display: flex;
   align-items: stretch;
-
-  .selected {
-    background-color: var(--background-secondary);
-  }
 `;
 
 const AccountName = styled.span`
@@ -55,6 +53,8 @@ const AccountName = styled.span`
   gap: 8px;
   margin-bottom: 2px;
   padding: 1px 6px;
+  border-radius: 4px;
+  cursor: pointer;
 
   /*
   Prevent the account name text from being selected when dragging, which on
@@ -65,13 +65,28 @@ const AccountName = styled.span`
   -webkit-tap-highlight-color: transparent;
 
   :hover {
-    background-color: var(--background-primary-alt);
+    background-color: var(--background-modifier-hover);
+  }
+
+  /*
+  Highlight the selected accounts prominently with the accent color so it is
+  obvious which accounts are shown, on both desktop and mobile.
+  */
+  &.selected {
+    background-color: var(--interactive-accent);
+    color: var(--text-on-accent);
+    font-weight: 600;
   }
 
   .ledger-account-balance {
     flex-shrink: 0;
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
+  }
+
+  &.selected .ledger-account-balance {
+    color: var(--text-on-accent);
+    opacity: 0.85;
   }
 `;
 
@@ -129,6 +144,35 @@ const useCurrentBalances = (
 
     return aggregated;
   }, [dailyAccountBalanceMap]);
+
+/**
+ * useCurrentNetWorth computes the most recent net worth (the sum of all asset
+ * and liability account balances). Returns undefined when there are no asset or
+ * liability accounts to total.
+ */
+const useCurrentNetWorth = (
+  dailyAccountBalanceMap: Map<string, Map<string, number>>,
+  txCache: TransactionCache,
+): number | undefined =>
+  React.useMemo(() => {
+    const netWorthAccounts = new Set(
+      union(txCache.assetAccounts, txCache.liabilityAccounts),
+    );
+    if (netWorthAccounts.size === 0) {
+      return undefined;
+    }
+
+    const dates = [...dailyAccountBalanceMap.keys()];
+    const latest =
+      dates.length > 0
+        ? dailyAccountBalanceMap.get(dates[dates.length - 1])
+        : undefined;
+    if (!latest) {
+      return undefined;
+    }
+
+    return calcNetWorth(latest, netWorthAccounts);
+  }, [dailyAccountBalanceMap, txCache]);
 
 const Tree: React.FC<{
   data: Node;
@@ -222,9 +266,30 @@ export const AccountsList: React.FC<{
   }, [props.txCache]);
 
   const balances = useCurrentBalances(props.dailyAccountBalanceMap);
+  const netWorth = useCurrentNetWorth(
+    props.dailyAccountBalanceMap,
+    props.txCache,
+  );
+  const showingNetWorth = props.selectedAccounts.length === 0;
 
   return (
     <ListContainer className="ledger-account-list" mobile={Platform.isMobile}>
+      <TreeRow>
+        <ExpanderSpacer className="ledger-account-expander-spacer" />
+        <AccountName
+          className={`ledger-account-name${showingNetWorth ? ' selected' : ''}`}
+          onClick={() => props.setSelectedAccounts([])}
+          title="Show net worth (clears the account selection)"
+        >
+          <span>Net Worth</span>
+          {netWorth !== undefined ? (
+            <span className="ledger-account-balance">
+              {props.currencySymbol}
+              {netWorth.toFixed(2)}
+            </span>
+          ) : null}
+        </AccountName>
+      </TreeRow>
       {data.map((root) => (
         <Tree
           data={root}
