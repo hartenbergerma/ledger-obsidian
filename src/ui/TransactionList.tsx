@@ -8,10 +8,13 @@ import {
   filterByAccount,
   filterByEndDate,
   filterByStartDate,
+  filterByTag,
   filterTransactions,
   getTotal,
+  getTransactionTags,
 } from '../transaction-utils';
 import { ChartSegment } from './chartInteraction';
+import { TagFilter, TagPill } from './Tag';
 import { Moment } from 'moment';
 import React from 'react';
 import { Column, useFilters, useSortBy, useTable } from 'react-table';
@@ -140,6 +143,8 @@ export const MobileTransactionList: React.FC<{
   txCache: TransactionCache;
   updater: LedgerModifier;
   selectedAccounts: string[];
+  selectedTag: string | null;
+  onToggleTag: (tag: string) => void;
   startDate: Moment;
   endDate: Moment;
   segment?: ChartSegment | null;
@@ -164,6 +169,12 @@ export const MobileTransactionList: React.FC<{
       filteredTransactions,
       filterByEndDate(end),
     );
+    if (props.selectedTag) {
+      filteredTransactions = filterTransactions(
+        filteredTransactions,
+        filterByTag(props.selectedTag),
+      );
+    }
 
     // Sort so most recent transactions come first
     return [...filteredTransactions].sort((a, b) => {
@@ -174,17 +185,26 @@ export const MobileTransactionList: React.FC<{
       }
       return aDate.isBefore(bDate) ? 1 : -1;
     });
-  }, [props.txCache, props.selectedAccounts, start, end]);
+  }, [props.txCache, props.selectedAccounts, props.selectedTag, start, end]);
 
   const banner =
     props.segment && props.onClearSegment ? (
       <SegmentBanner segment={props.segment} onClear={props.onClearSegment} />
     ) : null;
 
+  const tagFilter = (
+    <TagFilter
+      allTags={props.txCache.tags}
+      selectedTag={props.selectedTag}
+      onToggleTag={props.onToggleTag}
+    />
+  );
+
   if (transactions.length === 0) {
     return (
       <>
         {banner}
+        {tagFilter}
         <p>No transactions for the selected time period.</p>
       </>
     );
@@ -193,12 +213,14 @@ export const MobileTransactionList: React.FC<{
   return (
     <MobileTxListStyle>
       {banner}
+      {tagFilter}
       {transactions.slice(0, visibleCount).map((tx) => (
         <MobileTransactionEntry
           key={`${tx.block.firstLine}-${tx.value.date}-${tx.value.payee}`}
           tx={tx}
           currencySymbol={props.currencySymbol}
           updater={props.updater}
+          onSelectTag={props.onToggleTag}
         />
       ))}
       {transactions.length > visibleCount ? (
@@ -217,6 +239,7 @@ export const MobileTransactionEntry: React.FC<{
   tx: EnhancedTransaction;
   currencySymbol: string;
   updater: LedgerModifier;
+  onSelectTag?: (tag: string) => void;
 }> = (props): JSX.Element => {
   const nonCommentLines = props.tx.value.expenselines.filter(
     (line): line is EnhancedExpenseLine => 'account' in line,
@@ -227,11 +250,23 @@ export const MobileTransactionEntry: React.FC<{
       : '';
   const to =
     nonCommentLines.length === 2 ? nonCommentLines[0].account : 'Multiple';
+  const tags = getTransactionTags(props.tx);
 
   return (
     <div className="mobile-tx-card">
       <div className="mobile-tx-row">
-        <span className="mobile-tx-payee">{props.tx.value.payee}</span>
+        <span className="mobile-tx-payee">
+          {props.tx.value.payee}
+          {tags.map((tag) => (
+            <TagPill
+              key={tag}
+              tag={tag}
+              onClick={
+                props.onSelectTag ? () => props.onSelectTag?.(tag) : undefined
+              }
+            />
+          ))}
+        </span>
         <span className="mobile-tx-total">
           {getTotal(props.tx, props.currencySymbol)}
         </span>
@@ -295,11 +330,22 @@ const TableStyles = styled.div`
     width: 100%;
     margin-top: 8px;
   }
+
+  .ledger-tx-payee-cell {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .ledger-tx-payee-name {
+    margin-right: 4px;
+  }
 `;
 
 interface TableRow {
   date: string;
   payee: string;
+  tags: string[];
   total: string;
   from: string;
   to: string | JSX.Element;
@@ -332,6 +378,7 @@ const buildTableRows = (
       return {
         date: tx.value.date,
         payee: tx.value.payee,
+        tags: getTransactionTags(tx),
         total: getTotal(tx, currencySymbol),
         from: nonCommentLines[1].account,
         to: nonCommentLines[0].account,
@@ -342,6 +389,7 @@ const buildTableRows = (
     return {
       date: tx.value.date,
       payee: tx.value.payee,
+      tags: getTransactionTags(tx),
       total: getTotal(tx, currencySymbol),
       from: nonCommentLines[nonCommentLines.length - 1].account,
       to: <i>Multiple</i>,
@@ -368,6 +416,8 @@ export const RecentTransactionList: React.FC<{
   currencySymbol: string;
   txCache: TransactionCache;
   updater: LedgerModifier;
+  selectedTag: string | null;
+  onToggleTag: (tag: string) => void;
   startDate: Moment;
   endDate: Moment;
   segment?: ChartSegment | null;
@@ -384,19 +434,30 @@ export const RecentTransactionList: React.FC<{
       filteredTransactions,
       filterByEndDate(end),
     );
+    if (props.selectedTag) {
+      filteredTransactions = filterTransactions(
+        filteredTransactions,
+        filterByTag(props.selectedTag),
+      );
+    }
     return buildTableRows(
       filteredTransactions,
       props.currencySymbol,
       props.updater,
     );
-  }, [props.txCache, start, end, props.segment]);
+  }, [props.txCache, props.selectedTag, start, end, props.segment]);
   return (
     <>
       <h2>Transactions</h2>
       {props.segment && props.onClearSegment ? (
         <SegmentBanner segment={props.segment} onClear={props.onClearSegment} />
       ) : null}
-      <TransactionTable data={data} />
+      <TagFilter
+        allTags={props.txCache.tags}
+        selectedTag={props.selectedTag}
+        onToggleTag={props.onToggleTag}
+      />
+      <TransactionTable data={data} onSelectTag={props.onToggleTag} />
     </>
   );
 };
@@ -407,6 +468,8 @@ export const TransactionList: React.FC<{
   updater: LedgerModifier;
   selectedAccounts: string[];
   setSelectedAccount: (accountName: string) => void;
+  selectedTag: string | null;
+  onToggleTag: (tag: string) => void;
   startDate: Moment;
   endDate: Moment;
   segment?: ChartSegment | null;
@@ -429,26 +492,54 @@ export const TransactionList: React.FC<{
       filteredTransactions,
       filterByEndDate(end),
     );
+    if (props.selectedTag) {
+      filteredTransactions = filterTransactions(
+        filteredTransactions,
+        filterByTag(props.selectedTag),
+      );
+    }
     return buildTableRows(
       filteredTransactions,
       props.currencySymbol,
       props.updater,
     );
-  }, [props.txCache, props.selectedAccounts, start, end]);
+  }, [props.txCache, props.selectedAccounts, props.selectedTag, start, end]);
 
   return (
     <>
       {props.segment && props.onClearSegment ? (
         <SegmentBanner segment={props.segment} onClear={props.onClearSegment} />
       ) : null}
-      <TransactionTable data={data} />
+      <TagFilter
+        allTags={props.txCache.tags}
+        selectedTag={props.selectedTag}
+        onToggleTag={props.onToggleTag}
+      />
+      <TransactionTable data={data} onSelectTag={props.onToggleTag} />
     </>
   );
 };
 
+const PayeeCell: React.FC<{
+  row: TableRow;
+  onSelectTag?: (tag: string) => void;
+}> = ({ row, onSelectTag }): JSX.Element => (
+  <span className="ledger-tx-payee-cell">
+    <span className="ledger-tx-payee-name">{row.payee}</span>
+    {row.tags.map((tag) => (
+      <TagPill
+        key={tag}
+        tag={tag}
+        onClick={onSelectTag ? () => onSelectTag(tag) : undefined}
+      />
+    ))}
+  </span>
+);
+
 const TransactionTable: React.FC<{
   data: TableRow[];
-}> = ({ data }): JSX.Element => {
+  onSelectTag?: (tag: string) => void;
+}> = ({ data, onSelectTag }): JSX.Element => {
   const pageSize = 20;
   const [visibleCount, setVisibleCount] = React.useState(pageSize);
 
@@ -467,6 +558,11 @@ const TransactionTable: React.FC<{
       {
         Header: 'Payee',
         accessor: 'payee',
+        // Sorting still uses the plain payee string, but the cell also renders
+        // the transaction's tag(s) next to the payee name.
+        Cell: ({ row }: { row: { original: TableRow } }) => (
+          <PayeeCell row={row.original} onSelectTag={onSelectTag} />
+        ),
       },
       {
         Header: 'Total',
@@ -485,7 +581,7 @@ const TransactionTable: React.FC<{
         accessor: 'actions',
       },
     ],
-    [],
+    [onSelectTag],
   );
   const tableInstance = useTable({ columns, data }, useFilters, useSortBy);
 

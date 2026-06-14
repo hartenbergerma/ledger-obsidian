@@ -24,6 +24,14 @@ safely in your Obsidian Vault instead.
 - [x] Obsidian Protocol handling to quickly launch Obsidian and immediately record a transaction
   - Create a Shortcut on mobile to `obsidian://ledger`
 - [x] Dashboard with net-worth and account visualizations, on desktop and mobile.
+- [x] Tag transactions to categorize them across accounts.
+  - Add a tag with the "Tag" button in the "Add to Ledger" form. It opens a
+    dropdown of the tags already in your file and lets you create a new one.
+  - Tags are stored as a `#tag` inside the transaction's comment (e.g.
+    `2021/12/25 Starbucks  ; morning coffee #treats`), so they remain compatible
+    with any memo text and with the Ledger CLI.
+  - Tagged transactions display their tag next to the payee in the transaction
+    list, and you can filter the list down to a single tag.
 - [ ] Reporting (In progress!)
 - [ ] Account reconciliation (planned soon!)
 

@@ -3,13 +3,19 @@ import { settingsWithDefaults } from '../src/settings';
 import {
   filterByAccount,
   filterByPayeeExact,
+  filterByTag,
   filterTransactions,
+  formatComment,
   formatTransaction,
   getAccountsForPayee,
   getCurrency,
+  getMemoFromComment,
+  getTagsFromComment,
   getTotal,
+  getTransactionTag,
   makeAccountTree,
   Node,
+  sanitizeTag,
   sortAccountTree,
 } from '../src/transaction-utils';
 import { assert } from 'console';
@@ -48,6 +54,22 @@ describe('formatting a transaction into ledger', () => {
       assert(false);
       return; // Appease the type checker
     }
+    const output = formatTransaction(txCache.transactions[0], '$');
+    expect(output).toEqual('\n' + contents);
+  });
+  test('a transaction with a memo and a tag in the comment', () => {
+    const contents = `2021-04-20 Obsidian    ; lunch with team #work
+  ! e:Spending Money    $20.00
+    b:CreditUnion`;
+    const txCache = parse(contents, settingsWithDefaults({}));
+    expect(txCache.parsingErrors).toEqual([]);
+    if (txCache.transactions.length !== 1 || !txCache.transactions[0]) {
+      assert(false);
+      return; // Appease the type checker
+    }
+    expect(txCache.transactions[0].value.comment).toEqual(
+      'lunch with team #work',
+    );
     const output = formatTransaction(txCache.transactions[0], '$');
     expect(output).toEqual('\n' + contents);
   });
@@ -568,5 +590,119 @@ alias b=Assets:Banking
       'Expenses:Food',
       'Assets:Banking:Main',
     ]);
+  });
+});
+
+describe('tags', () => {
+  describe('sanitizeTag()', () => {
+    test.each([
+      ['coffee', 'coffee'],
+      ['#coffee', 'coffee'],
+      ['##coffee', 'coffee'],
+      ['  #coffee  ', 'coffee'],
+      ['#coffee.', 'coffee'],
+      ['#work,', 'work'],
+      ['multi word tag', 'multi-word-tag'],
+      ['#multi word', 'multi-word'],
+      ['Urlaub', 'Urlaub'],
+      ['#nested/sub', 'nested/sub'],
+      ['', ''],
+      ['#', ''],
+    ])('sanitizeTag(%p) === %p', (input, expected) => {
+      expect(sanitizeTag(input)).toEqual(expected);
+    });
+  });
+
+  describe('getTagsFromComment()', () => {
+    test.each<[string | undefined, string[]]>([
+      [undefined, []],
+      ['', []],
+      ['just a memo', []],
+      ['#coffee', ['coffee']],
+      ['lunch with team #work', ['work']],
+      ['#groceries #weekly', ['groceries', 'weekly']],
+      ['memo #a more text #b', ['a', 'b']],
+      ['# notatag', []],
+      ['#coffee.', ['coffee']],
+    ])('getTagsFromComment(%p) === %p', (input, expected) => {
+      expect(getTagsFromComment(input)).toEqual(expected);
+    });
+  });
+
+  describe('getMemoFromComment()', () => {
+    test.each<[string | undefined, string]>([
+      [undefined, ''],
+      ['', ''],
+      ['#coffee', ''],
+      ['lunch with team #work', 'lunch with team'],
+      ['memo #a more text #b', 'memo more text'],
+      ['just a memo', 'just a memo'],
+    ])('getMemoFromComment(%p) === %p', (input, expected) => {
+      expect(getMemoFromComment(input)).toEqual(expected);
+    });
+  });
+
+  describe('formatComment()', () => {
+    test('with neither a memo nor tags returns undefined', () => {
+      expect(formatComment('', [])).toBeUndefined();
+    });
+    test('with only a memo', () => {
+      expect(formatComment('lunch', [])).toEqual('lunch');
+    });
+    test('with only a tag', () => {
+      expect(formatComment('', ['work'])).toEqual('#work');
+    });
+    test('with both a memo and a tag', () => {
+      expect(formatComment('lunch', ['work'])).toEqual('lunch #work');
+    });
+    test('round trips with the comment parsers', () => {
+      const comment = formatComment('lunch with team', ['work']);
+      expect(getMemoFromComment(comment)).toEqual('lunch with team');
+      expect(getTagsFromComment(comment)).toEqual(['work']);
+    });
+  });
+
+  describe('getTransactionTag() and filterByTag()', () => {
+    const contents = `2021-01-01 Grocery Store    ; weekly shop #groceries
+    Expenses:Food    $40.00
+    Assets:Checking
+
+2021-01-02 Cinema    ; #fun
+    Expenses:Entertainment    $15.00
+    Assets:Checking
+
+2021-01-03 Gas Station
+    Expenses:Auto    $30.00
+    Assets:Checking`;
+    const txCache = parse(contents, settingsWithDefaults({}));
+
+    test('the file has no parsing errors', () => {
+      expect(txCache.parsingErrors).toEqual([]);
+    });
+
+    test('collects the unique tags in the cache, sorted', () => {
+      expect(txCache.tags).toEqual(['fun', 'groceries']);
+    });
+
+    test('getTransactionTag returns the tag, or empty when untagged', () => {
+      expect(getTransactionTag(txCache.transactions[0])).toEqual('groceries');
+      expect(getTransactionTag(txCache.transactions[1])).toEqual('fun');
+      expect(getTransactionTag(txCache.transactions[2])).toEqual('');
+    });
+
+    test('filterByTag keeps only transactions with the tag', () => {
+      const result = filterTransactions(
+        txCache.transactions,
+        filterByTag('groceries'),
+      );
+      expect(result).toHaveLength(1);
+      expect(result[0].value.payee).toEqual('Grocery Store');
+    });
+
+    test('filterByTag returns nothing for an unused tag', () => {
+      expect(
+        filterTransactions(txCache.transactions, filterByTag('missing')),
+      ).toEqual([]);
+    });
   });
 });

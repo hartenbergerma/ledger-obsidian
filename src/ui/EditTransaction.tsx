@@ -6,11 +6,15 @@ import {
   TransactionCache,
 } from '../parser';
 import {
+  formatComment,
   formatTransaction,
   getAccountsForPayee,
+  getMemoFromComment,
   getTotalAsNum,
+  getTransactionTag,
 } from '../transaction-utils';
 import { CurrencyInputFormik } from './CurrencyInput';
+import { TagSelect } from './Tag';
 import { TextSuggest } from './TextSuggest';
 import {
   ErrorMessage,
@@ -415,6 +419,12 @@ export interface Values {
   date: string;
   total: string;
   lines: Line[];
+
+  /**
+   * tag is the (single) tag applied to this transaction, without the leading
+   * `#`. An empty string means the transaction is untagged.
+   */
+  tag: string;
 }
 
 interface ValueErrors {
@@ -518,6 +528,7 @@ export const EditTransaction: React.FC<{
       ? window.moment().format('YYYY-MM-DD')
       : window.moment(props.initialState.value.date).format('YYYY-MM-DD'),
     total: isNew ? '' : getTotalAsNum(props.initialState).toString(),
+    tag: isNew ? '' : getTransactionTag(props.initialState),
     lines: isNew
       ? [
           {
@@ -620,6 +631,11 @@ export const EditTransaction: React.FC<{
             localPayee = `${from} to ${to}`;
           }
 
+          // Preserve any existing memo text in the transaction comment while
+          // applying the (possibly changed or cleared) tag.
+          const memo = getMemoFromComment(props.initialState.value.comment);
+          const comment = formatComment(memo, values.tag ? [values.tag] : []);
+
           // This tx is not fully valid because we are not specifying a valid block.
           // It's only complete enough that we can format it into a string.
           const newTx: EnhancedTransaction = {
@@ -638,7 +654,7 @@ export const EditTransaction: React.FC<{
                 lineToEnhancedExpenseLine(line),
               ),
               check: props.initialState.value.check,
-              comment: props.initialState.value.comment,
+              comment,
             },
           };
 
@@ -761,6 +777,11 @@ export const EditTransaction: React.FC<{
                         >
                           Set as default for Payee
                         </button>
+                        <TagSelect
+                          tag={formik.values.tag}
+                          allTags={props.txCache.tags}
+                          onChange={(tag) => formik.setFieldValue('tag', tag)}
+                        />
                       </div>
                     </>
                   )}

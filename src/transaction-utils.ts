@@ -37,7 +37,10 @@ export const formatTransaction = (
         : `  ${symb} ${line.account}${comment}`;
     })
     .join('\n');
-  return `\n${tx.value.date} ${tx.value.payee}\n${joinedLines}`;
+  // The transaction-level comment holds any memo text and the transaction's tag
+  // (e.g. `; lunch #work`). It is written on the same line as the payee.
+  const txComment = tx.value.comment ? `    ; ${tx.value.comment}` : '';
+  return `\n${tx.value.date} ${tx.value.payee}${txComment}\n${joinedLines}`;
 };
 
 /**
@@ -136,6 +139,94 @@ export const filterByPayeeExact =
   (account: string): Filter =>
   (tx: EnhancedTransaction): boolean =>
     tx.value.payee === account;
+
+/**
+ * A tag is a hashtag-style label (e.g. `#vacation`) stored within a
+ * transaction's comment to categorize it. A comment may contain both a memo and
+ * a tag, for example `lunch with team #work`. Tags are whitespace-delimited
+ * tokens which begin with `#`.
+ */
+
+/**
+ * sanitizeTag normalizes a raw tag (as typed by the user or read from a
+ * comment) into a canonical tag name without the leading `#`. A leading `#` and
+ * surrounding whitespace are removed, internal whitespace is converted to
+ * hyphens, and trailing punctuation is dropped.
+ */
+export const sanitizeTag = (raw: string): string =>
+  raw
+    .trim()
+    .replace(/^#+/, '')
+    .replace(/\s+/g, '-')
+    .replace(/[.,;:!?]+$/, '');
+
+/**
+ * getTagsFromComment extracts the tag names (without the leading `#`) from a
+ * comment string, in the order they appear.
+ */
+export const getTagsFromComment = (comment: string | undefined): string[] => {
+  if (!comment) {
+    return [];
+  }
+  return comment
+    .split(/\s+/)
+    .filter((token) => token.length > 1 && token.startsWith('#'))
+    .map((token) => sanitizeTag(token))
+    .filter((tag) => tag.length > 0);
+};
+
+/**
+ * getMemoFromComment returns the comment text with any tag tokens removed, i.e.
+ * the "memo" portion of a comment that also contains a tag.
+ */
+export const getMemoFromComment = (comment: string | undefined): string => {
+  if (!comment) {
+    return '';
+  }
+  return comment
+    .split(/\s+/)
+    .filter((token) => !(token.length > 1 && token.startsWith('#')))
+    .join(' ')
+    .trim();
+};
+
+/**
+ * formatComment combines a memo and a set of tags back into a single comment
+ * string suitable for storing in the ledger file. Returns undefined when there
+ * is neither a memo nor any tags.
+ */
+export const formatComment = (
+  memo: string,
+  tags: string[],
+): string | undefined => {
+  const parts = [memo.trim(), ...tags.map((tag) => `#${tag}`)].filter(
+    (part) => part.length > 0,
+  );
+  return parts.length > 0 ? parts.join(' ') : undefined;
+};
+
+/**
+ * getTransactionTags returns the list of tags applied to a transaction, parsed
+ * from its comment.
+ */
+export const getTransactionTags = (tx: EnhancedTransaction): string[] =>
+  getTagsFromComment(tx.value.comment);
+
+/**
+ * getTransactionTag returns the single (first) tag applied to a transaction, or
+ * an empty string when it has none.
+ */
+export const getTransactionTag = (tx: EnhancedTransaction): string =>
+  getTransactionTags(tx)[0] || '';
+
+/**
+ * filterByTag matches transactions which have been tagged with the provided
+ * tag.
+ */
+export const filterByTag =
+  (tag: string): Filter =>
+  (tx: EnhancedTransaction): boolean =>
+    getTransactionTags(tx).includes(tag);
 
 /**
  * getAccountsForPayee returns the (dealiased) account names used in the most
