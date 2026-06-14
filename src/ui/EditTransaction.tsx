@@ -288,6 +288,55 @@ const ExpenseLine: React.FC<{
   );
 };
 
+const SwapButtonStyle = styled.div`
+  display: flex;
+  justify-content: center;
+  margin: -3px 0;
+
+  .swapButton {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--text-muted);
+  }
+
+  .swapButton:hover {
+    background: var(--background-secondary-alt);
+    color: var(--text-normal);
+  }
+`;
+
+/**
+ * SwapAccounts renders a small up/down arrow button used to swap the two
+ * accounts of a simple (two line) transaction, e.g. to flip which account is
+ * the expense and which is the asset.
+ */
+const SwapAccounts: React.FC<{ onClick: () => void }> = ({
+  onClick,
+}): JSX.Element => (
+  <SwapButtonStyle>
+    <div className="swapButton" onClick={onClick} title="Swap accounts">
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M8 20 V4 M5 7 L8 4 L11 7" />
+        <path d="M16 4 V20 M13 17 L16 20 L19 17" />
+      </svg>
+    </div>
+  </SwapButtonStyle>
+);
+
 const Margin = styled.div`
   margin: 5px;
 `;
@@ -657,15 +706,29 @@ export const EditTransaction: React.FC<{
                   {({ insert, remove }) => (
                     <>
                       {formik.values.lines.map((line, i) => (
-                        <ExpenseLine
-                          key={line.id}
-                          line={line}
-                          formik={formik}
-                          i={i}
-                          remove={remove}
-                          txCache={props.txCache}
-                          currencySymbol={props.currencySymbol}
-                        />
+                        <React.Fragment key={line.id}>
+                          <ExpenseLine
+                            line={line}
+                            formik={formik}
+                            i={i}
+                            remove={remove}
+                            txCache={props.txCache}
+                            currencySymbol={props.currencySymbol}
+                          />
+                          {/* With exactly two accounts, offer a button to
+                          swap them rather than re-typing both fields. */}
+                          {formik.values.lines.length === 2 && i === 0 && (
+                            <SwapAccounts
+                              onClick={() => {
+                                const [first, second] = formik.values.lines;
+                                formik.setFieldValue('lines', [
+                                  { ...first, account: second.account },
+                                  { ...second, account: first.account },
+                                ]);
+                              }}
+                            />
+                          )}
+                        </React.Fragment>
                       ))}
                       <div className="splitButtons">
                         <button

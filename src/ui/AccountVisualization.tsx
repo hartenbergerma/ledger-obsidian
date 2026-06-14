@@ -288,6 +288,10 @@ const DeltaVisualization: React.FC<{
   const options: IBarChartOptions = {
     height: '300px',
     width: '100%',
+    // Stack the per-account bars on top of each other for each date. Grouping
+    // them side by side becomes unreadable once more than two accounts are
+    // selected, as the bars get too thin and overflow into each other.
+    stackBars: true,
     axisX: {
       labelInterpolationFnc: makeChartLabelFormatter(
         props.interval,
@@ -301,25 +305,27 @@ const DeltaVisualization: React.FC<{
       return;
     }
 
-    // Draw the value of the bar above (or below, for negative values) the bar.
-    // A zero bar means there were no transactions, so we leave it unlabeled.
-    const value = dpoint.value.y;
-    if (value !== 0) {
-      const label = new Chartist.Svg(
-        'text',
-        {
-          x: dpoint.x1,
-          y: value >= 0 ? dpoint.y2 - 6 : dpoint.y2 + 14,
-          'text-anchor': 'middle',
-        },
-        'ct-bar-label',
-      );
-      label.text(formatChartValue(value, props.currencySymbol));
-      dpoint.group.append(label);
-    }
-
     if (props.selectedSegment?.index === dpoint.index) {
       dpoint.element.addClass('ct-bar-selected');
+
+      // The value labels are only shown for the selected date, where one is
+      // drawn for each account's bar so every account's contribution is
+      // visible. A zero bar means there were no transactions, so we leave it
+      // unlabeled.
+      const value = dpoint.value.y;
+      if (value !== 0) {
+        const label = new Chartist.Svg(
+          'text',
+          {
+            x: dpoint.x1,
+            y: value >= 0 ? dpoint.y2 - 6 : dpoint.y2 + 14,
+            'text-anchor': 'middle',
+          },
+          'ct-bar-label',
+        );
+        label.text(formatChartValue(value, props.currencySymbol));
+        dpoint.group.append(label);
+      }
     }
     const node = dpoint.element.getNode();
     node.addEventListener('click', () => {

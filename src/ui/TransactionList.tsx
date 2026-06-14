@@ -40,9 +40,7 @@ const SegmentBanner: React.FC<{
 }> = ({ segment, onClear }): JSX.Element => (
   <SegmentBannerStyle>
     <span>
-      Showing transactions for <strong>{segment.label}</strong> (
-      {segment.filterStart.format('MMM D')} –{' '}
-      {segment.filterEnd.format('MMM D, YYYY')})
+      Showing transactions for <strong>{segment.label}</strong>
     </span>
     <button onClick={onClear}>Clear selection</button>
   </SegmentBannerStyle>

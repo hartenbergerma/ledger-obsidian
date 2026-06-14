@@ -24,7 +24,7 @@ describe('makeChartSegment()', () => {
     expect(segment.value).toEqual(1234);
   });
 
-  test('formats the label using the month for a monthly interval', () => {
+  test('formats the label using the month name and date range for a monthly interval', () => {
     const segment = makeChartSegment(
       buckets,
       1,
@@ -32,10 +32,10 @@ describe('makeChartSegment()', () => {
       0,
       'month',
     );
-    expect(segment.label).toEqual('Feb 2026');
+    expect(segment.label).toEqual('February (02.01.-01.02.26)');
   });
 
-  test('formats the label using the day for a daily interval', () => {
+  test('formats the label using just the date for a daily interval', () => {
     const segment = makeChartSegment(
       buckets,
       1,
@@ -43,7 +43,19 @@ describe('makeChartSegment()', () => {
       0,
       'day',
     );
-    expect(segment.label).toEqual('Feb 1, 2026');
+    expect(segment.label).toEqual('01.02.26');
+  });
+
+  test('formats the label using the calendar week and date range for a weekly interval', () => {
+    const weeklyBuckets = ['2026-03-15', '2026-03-22', '2026-03-29'];
+    const segment = makeChartSegment(
+      weeklyBuckets,
+      2,
+      window.moment('2026-03-22'),
+      0,
+      'week',
+    );
+    expect(segment.label).toEqual('KW13 (23.03.-29.03.26)');
   });
 
   test('does not mutate the provided previous boundary', () => {
