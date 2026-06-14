@@ -11,10 +11,42 @@ import {
   filterTransactions,
   getTotal,
 } from '../transaction-utils';
+import { ChartSegment } from './chartInteraction';
 import { Moment } from 'moment';
 import React from 'react';
 import { Column, useFilters, useSortBy, useTable } from 'react-table';
 import styled from 'styled-components';
+
+/**
+ * SegmentBanner shows which chart segment the transaction list is currently
+ * filtered to, along with a button to clear the selection and return to the
+ * full date range.
+ */
+const SegmentBannerStyle = styled.div`
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+
+  button {
+    flex-shrink: 0;
+  }
+`;
+
+const SegmentBanner: React.FC<{
+  segment: ChartSegment;
+  onClear: () => void;
+}> = ({ segment, onClear }): JSX.Element => (
+  <SegmentBannerStyle>
+    <span>
+      Showing transactions for <strong>{segment.label}</strong> (
+      {segment.filterStart.format('MMM D')} –{' '}
+      {segment.filterEnd.format('MMM D, YYYY')})
+    </span>
+    <button onClick={onClear}>Clear selection</button>
+  </SegmentBannerStyle>
+);
 
 /**
  * TransactionActions renders the edit and delete buttons for a transaction.
@@ -112,9 +144,14 @@ export const MobileTransactionList: React.FC<{
   selectedAccounts: string[];
   startDate: Moment;
   endDate: Moment;
+  segment?: ChartSegment | null;
+  onClearSegment?: () => void;
 }> = (props): JSX.Element => {
   const pageSize = 20;
   const [visibleCount, setVisibleCount] = React.useState(pageSize);
+
+  const start = props.segment ? props.segment.filterStart : props.startDate;
+  const end = props.segment ? props.segment.filterEnd : props.endDate;
 
   const transactions = React.useMemo(() => {
     let filteredTransactions = filterTransactions(
@@ -123,11 +160,11 @@ export const MobileTransactionList: React.FC<{
     );
     filteredTransactions = filterTransactions(
       filteredTransactions,
-      filterByStartDate(props.startDate),
+      filterByStartDate(start),
     );
     filteredTransactions = filterTransactions(
       filteredTransactions,
-      filterByEndDate(props.endDate),
+      filterByEndDate(end),
     );
 
     // Sort so most recent transactions come first
@@ -139,14 +176,25 @@ export const MobileTransactionList: React.FC<{
       }
       return aDate.isBefore(bDate) ? 1 : -1;
     });
-  }, [props.txCache, props.selectedAccounts, props.startDate, props.endDate]);
+  }, [props.txCache, props.selectedAccounts, start, end]);
+
+  const banner =
+    props.segment && props.onClearSegment ? (
+      <SegmentBanner segment={props.segment} onClear={props.onClearSegment} />
+    ) : null;
 
   if (transactions.length === 0) {
-    return <p>No transactions for the selected time period.</p>;
+    return (
+      <>
+        {banner}
+        <p>No transactions for the selected time period.</p>
+      </>
+    );
   }
 
   return (
     <MobileTxListStyle>
+      {banner}
       {transactions.slice(0, visibleCount).map((tx) => (
         <MobileTransactionEntry
           key={`${tx.block.firstLine}-${tx.value.date}-${tx.value.payee}`}
@@ -244,6 +292,11 @@ const TableStyles = styled.div`
     fill: none;
     stroke: none;
   }
+
+  .ledger-tx-more {
+    width: 100%;
+    margin-top: 8px;
+  }
 `;
 
 interface TableRow {
@@ -319,28 +372,32 @@ export const RecentTransactionList: React.FC<{
   updater: LedgerModifier;
   startDate: Moment;
   endDate: Moment;
+  segment?: ChartSegment | null;
+  onClearSegment?: () => void;
 }> = (props): JSX.Element => {
+  const start = props.segment ? props.segment.filterStart : props.startDate;
+  const end = props.segment ? props.segment.filterEnd : props.endDate;
   const data = React.useMemo(() => {
     let filteredTransactions = filterTransactions(
       props.txCache.transactions,
-      filterByStartDate(props.startDate),
+      filterByStartDate(start),
     );
     filteredTransactions = filterTransactions(
       filteredTransactions,
-      filterByEndDate(props.endDate),
+      filterByEndDate(end),
     );
-    if (filteredTransactions.length > 10) {
-      filteredTransactions = filteredTransactions.slice(-10);
-    }
     return buildTableRows(
       filteredTransactions,
       props.currencySymbol,
       props.updater,
     );
-  }, [props.txCache, props.startDate, props.endDate]);
+  }, [props.txCache, start, end, props.segment]);
   return (
     <>
-      <h2>Last 10 Transactions for Selected Dates</h2>
+      <h2>Transactions</h2>
+      {props.segment && props.onClearSegment ? (
+        <SegmentBanner segment={props.segment} onClear={props.onClearSegment} />
+      ) : null}
       <TransactionTable data={data} />
     </>
   );
@@ -354,7 +411,11 @@ export const TransactionList: React.FC<{
   setSelectedAccount: (accountName: string) => void;
   startDate: Moment;
   endDate: Moment;
+  segment?: ChartSegment | null;
+  onClearSegment?: () => void;
 }> = (props): JSX.Element => {
+  const start = props.segment ? props.segment.filterStart : props.startDate;
+  const end = props.segment ? props.segment.filterEnd : props.endDate;
   const data = React.useMemo(() => {
     // Filters are applied sequentially when they need to be and-ed together.
     // This might not be the most efficient solution...
@@ -364,25 +425,41 @@ export const TransactionList: React.FC<{
     );
     filteredTransactions = filterTransactions(
       filteredTransactions,
-      filterByStartDate(props.startDate),
+      filterByStartDate(start),
     );
     filteredTransactions = filterTransactions(
       filteredTransactions,
-      filterByEndDate(props.endDate),
+      filterByEndDate(end),
     );
     return buildTableRows(
       filteredTransactions,
       props.currencySymbol,
       props.updater,
     );
-  }, [props.txCache, props.selectedAccounts, props.startDate, props.endDate]);
+  }, [props.txCache, props.selectedAccounts, start, end]);
 
-  return <TransactionTable data={data} />;
+  return (
+    <>
+      {props.segment && props.onClearSegment ? (
+        <SegmentBanner segment={props.segment} onClear={props.onClearSegment} />
+      ) : null}
+      <TransactionTable data={data} />
+    </>
+  );
 };
 
 const TransactionTable: React.FC<{
   data: TableRow[];
 }> = ({ data }): JSX.Element => {
+  const pageSize = 20;
+  const [visibleCount, setVisibleCount] = React.useState(pageSize);
+
+  // Reset back to the first page whenever the underlying data changes (e.g. a
+  // different date range or chart segment is selected).
+  React.useEffect(() => {
+    setVisibleCount(pageSize);
+  }, [data]);
+
   const columns = React.useMemo<Column[]>(
     () => [
       {
@@ -440,7 +517,7 @@ const TransactionTable: React.FC<{
           ))}
         </thead>
         <tbody {...getTableBodyProps()}>
-          {rows.map((row) => {
+          {rows.slice(0, visibleCount).map((row) => {
             prepareRow(row);
             return (
               <tr {...row.getRowProps()}>
@@ -452,6 +529,14 @@ const TransactionTable: React.FC<{
           })}
         </tbody>
       </table>
+      {rows.length > visibleCount ? (
+        <button
+          className="ledger-tx-more"
+          onClick={() => setVisibleCount(visibleCount + pageSize)}
+        >
+          Load more
+        </button>
+      ) : null}
     </TableStyles>
   );
 };
