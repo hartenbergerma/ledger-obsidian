@@ -95,9 +95,11 @@ const Chart = styled.div<{ $mobile: boolean }>`
     stroke-width: 14px;
   }
 
-  .ct-bar-selected {
-    stroke: var(--interactive-accent);
-    stroke-width: 12px;
+  /* When a bucket is selected, the bars in the other buckets are faded out so
+  the selected bucket stands out. The selected bars keep their own width and
+  per-account colors so the accounts remain distinguishable. */
+  .ct-bar-faded {
+    opacity: 0.2;
   }
 
   .ct-bar-label,
@@ -318,9 +320,14 @@ const DeltaVisualization: React.FC<{
       return;
     }
 
-    if (props.selectedSegment?.index === dpoint.index) {
-      dpoint.element.addClass('ct-bar-selected');
+    if (props.selectedSegment && props.selectedSegment.index !== dpoint.index) {
+      // Fade the bars of the buckets that are not selected so the selected
+      // bucket stands out, while leaving the selected bars at their natural
+      // width and per-account color.
+      dpoint.element.addClass('ct-bar-faded');
+    }
 
+    if (props.selectedSegment?.index === dpoint.index) {
       // The value labels are only shown for the selected date, where one is
       // drawn for each account's bar so every account's contribution is
       // visible. The label is centered over the middle of its bar segment so

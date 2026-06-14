@@ -339,7 +339,7 @@ const SwapAccounts: React.FC<{ onClick: () => void }> = ({
 );
 
 const Margin = styled.div`
-  margin: 5px;
+  margin: 8px;
 `;
 
 const Warning = styled.div`
@@ -377,7 +377,9 @@ const FormStyles = styled.div`
   .splitButtons {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 10px;
+    /* Give the buttons a bit of room below the account fields. */
+    margin: 16px 8px 8px;
   }
 
   input {
