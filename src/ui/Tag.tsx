@@ -1,7 +1,5 @@
 import { sanitizeTag } from '../transaction-utils';
 import React from 'react';
-import ReactDOM from 'react-dom';
-import { usePopper } from 'react-popper';
 import styled from 'styled-components';
 
 const TagIcon: React.FC = (): JSX.Element => (
@@ -126,28 +124,25 @@ export const TagPill: React.FC<{
 
 const TagSelectStyle = styled.div`
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
 
   .ledger-tag-button {
     margin: 0;
   }
-`;
 
-const TagDropdownStyle = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 200px;
-  max-width: 280px;
-  max-height: 240px;
-  overflow-y: auto;
-  padding: 8px;
-  background: var(--background-primary);
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 6px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  .ledger-tag-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+    max-width: 320px;
+    padding: 8px;
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 6px;
+  }
 
   .ledger-tag-input {
     width: 100%;
@@ -156,6 +151,8 @@ const TagDropdownStyle = styled.div`
   .ledger-tag-options {
     display: flex;
     flex-direction: column;
+    max-height: 180px;
+    overflow-y: auto;
   }
 
   .ledger-tag-option {
@@ -184,10 +181,15 @@ const TagDropdownStyle = styled.div`
 `;
 
 /**
- * TagSelect lets the user assign a single tag to a transaction. The current tag
- * (if any) is shown as a removable pill, and a button opens a dropdown listing
- * the existing tags in the file along with a field to filter or create a new
- * tag. Choosing a tag replaces any current one.
+ * TagSelect lets the user assign a single tag to a transaction. When a tag is
+ * set it is shown as a removable pill; removing it brings back the "+ Tag"
+ * button. The button opens an inline panel with a field to filter or create a
+ * tag and a list of the existing tags in the file. Choosing a tag replaces any
+ * current one.
+ *
+ * The panel is rendered inline (rather than as a floating dropdown) so it reads
+ * keyboard input reliably inside the modal and never overlaps the account
+ * fields above it.
  */
 export const TagSelect: React.FC<{
   tag: string;
@@ -196,37 +198,7 @@ export const TagSelect: React.FC<{
 }> = ({ tag, allTags, onChange }): JSX.Element => {
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState('');
-  const [referenceElement, setReferenceElement] =
-    React.useState<HTMLElement | null>(null);
-  const [popperElement, setPopperElement] = React.useState<HTMLElement | null>(
-    null,
-  );
   const inputRef = React.useRef<HTMLInputElement | null>(null);
-  const { styles, attributes } = usePopper(referenceElement, popperElement, {
-    placement: 'bottom-start',
-    // Render in a portal with the fixed strategy so the dropdown floats above
-    // the modal rather than being clipped by it.
-    strategy: 'fixed',
-  });
-
-  // Close when clicking outside of the button or the floating dropdown.
-  React.useEffect(() => {
-    if (!open) {
-      return;
-    }
-    const handle = (e: MouseEvent): void => {
-      const target = e.target as Node;
-      if (
-        referenceElement?.contains(target) ||
-        popperElement?.contains(target)
-      ) {
-        return;
-      }
-      setOpen(false);
-    };
-    document.addEventListener('mousedown', handle);
-    return () => document.removeEventListener('mousedown', handle);
-  }, [open, referenceElement, popperElement]);
 
   const selectTag = (raw: string): void => {
     const sanitized = sanitizeTag(raw);
@@ -237,101 +209,98 @@ export const TagSelect: React.FC<{
     setOpen(false);
   };
 
-  const normalizedQuery = sanitizeTag(query);
-  const suggestions = allTags
-    .filter((t) => t !== tag)
-    .filter(
-      (t) =>
-        normalizedQuery === '' ||
-        t.toLowerCase().includes(normalizedQuery.toLowerCase()),
+  if (tag !== '') {
+    // A tag is set: show it in place of the "+ Tag" button. Removing it reveals
+    // the button again.
+    return (
+      <TagSelectStyle>
+        <TagPill tag={tag} onRemove={() => onChange('')} />
+      </TagSelectStyle>
     );
+  }
+
+  const normalizedQuery = sanitizeTag(query);
+  const suggestions = allTags.filter(
+    (t) =>
+      normalizedQuery === '' ||
+      t.toLowerCase().includes(normalizedQuery.toLowerCase()),
+  );
   const canCreate =
     normalizedQuery !== '' &&
     !allTags.some((t) => t.toLowerCase() === normalizedQuery.toLowerCase());
 
+  if (!open) {
+    return (
+      <TagSelectStyle>
+        <button
+          type="button"
+          className="ledger-tag-button"
+          onClick={() => {
+            setOpen(true);
+            window.setTimeout(() => inputRef.current?.focus(), 0);
+          }}
+          title="Tag this transaction"
+        >
+          + Tag
+        </button>
+      </TagSelectStyle>
+    );
+  }
+
   return (
     <TagSelectStyle>
-      {tag !== '' ? <TagPill tag={tag} onRemove={() => onChange('')} /> : null}
-      <button
-        type="button"
-        ref={setReferenceElement}
-        className="ledger-tag-button"
-        onClick={() => {
-          const next = !open;
-          setOpen(next);
-          if (next) {
-            window.setTimeout(() => inputRef.current?.focus(), 0);
-          }
-        }}
-        title="Tag this transaction"
-      >
-        {tag === '' ? '+ Tag' : 'Change tag'}
-      </button>
-
-      {open
-        ? ReactDOM.createPortal(
-            <TagDropdownStyle
-              ref={setPopperElement}
-              style={{
-                ...styles.popper,
-                // Float above the modal (same layer Obsidian uses for menus).
-                zIndex: 'var(--layer-menu, 9999)',
-              }}
-              {...attributes.popper}
-              onWheel={(e) => e.stopPropagation()}
-              onTouchMove={(e) => e.stopPropagation()}
+      <div className="ledger-tag-panel">
+        <input
+          ref={inputRef}
+          type="text"
+          className="ledger-tag-input"
+          placeholder="Filter or create tag…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          // Close when focus leaves the panel (e.g. clicking elsewhere). The
+          // options use onMouseDown so a selection registers before the blur.
+          onBlur={() => setOpen(false)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              if (normalizedQuery !== '') {
+                selectTag(query);
+              }
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              setOpen(false);
+            }
+          }}
+        />
+        <div className="ledger-tag-options">
+          {suggestions.map((t) => (
+            // Select on mouseDown so it fires before the input's blur closes
+            // the panel (the same pattern the account/payee suggestions use).
+            <div
+              key={t}
+              className="ledger-tag-option"
+              onMouseDown={() => selectTag(t)}
             >
-              <input
-                ref={inputRef}
-                type="text"
-                className="ledger-tag-input"
-                placeholder="Filter or create tag…"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    if (normalizedQuery !== '') {
-                      selectTag(query);
-                    }
-                  } else if (e.key === 'Escape') {
-                    e.preventDefault();
-                    setOpen(false);
-                  }
-                }}
-              />
-              <div className="ledger-tag-options">
-                {suggestions.map((t) => (
-                  <div
-                    key={t}
-                    className="ledger-tag-option"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => selectTag(t)}
-                  >
-                    <TagPill tag={t} />
-                  </div>
-                ))}
-                {canCreate ? (
-                  <div
-                    className="ledger-tag-option ledger-tag-create"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => selectTag(query)}
-                  >
-                    Create <TagPill tag={normalizedQuery} />
-                  </div>
-                ) : null}
-                {suggestions.length === 0 && !canCreate ? (
-                  <div className="ledger-tag-empty">
-                    {allTags.length === 0
-                      ? 'No tags yet — type to create one'
-                      : 'No matching tags'}
-                  </div>
-                ) : null}
-              </div>
-            </TagDropdownStyle>,
-            document.body,
-          )
-        : null}
+              <TagPill tag={t} />
+            </div>
+          ))}
+          {canCreate ? (
+            <div
+              className="ledger-tag-option ledger-tag-create"
+              onMouseDown={() => selectTag(query)}
+            >
+              Create <TagPill tag={normalizedQuery} />
+            </div>
+          ) : null}
+          {suggestions.length === 0 && !canCreate ? (
+            <div className="ledger-tag-empty">
+              {allTags.length === 0
+                ? 'No tags yet — type to create one'
+                : 'No matching tags'}
+            </div>
+          ) : null}
+        </div>
+      </div>
     </TagSelectStyle>
   );
 };

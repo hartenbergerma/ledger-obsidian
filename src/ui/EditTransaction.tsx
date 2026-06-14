@@ -441,18 +441,10 @@ export const EditTransaction: React.FC<{
   operation: Operation;
   updater: LedgerModifier;
   txCache: TransactionCache;
-  payeeAccountDefaults: Record<string, string[]>;
-  savePayeeAccountDefault: (payee: string, accounts: string[]) => void;
   close: () => void;
 }> = (props): JSX.Element => {
   const isNew = props.operation === 'new';
   const [page, setPage] = React.useState(1);
-
-  // Local copy of the payee account defaults so that defaults set during this
-  // session are reflected immediately by the auto-fill.
-  const [payeeDefaults, setPayeeDefaults] = React.useState(
-    props.payeeAccountDefaults,
-  );
 
   // Tracks the payee that the account fields were last auto-filled for, so that
   // simply re-focusing the payee field does not clobber edits the user has
@@ -463,10 +455,9 @@ export const EditTransaction: React.FC<{
   );
 
   /**
-   * applyPayeeAccountDefaults pre-fills the account fields based on the
-   * accounts most recently used with the provided payee (or an explicit default
-   * set with "Set as default for Payee"). Only applies to new transactions and
-   * only when the payee actually changes.
+   * applyPayeeAccountDefaults pre-fills the account fields based on the accounts
+   * most recently used with the provided payee. Only applies to new
+   * transactions and only when the payee actually changes.
    */
   const applyPayeeAccountDefaults = (
     formik: FormikProps<Values>,
@@ -477,9 +468,7 @@ export const EditTransaction: React.FC<{
     }
     lastAutofilledPayee.current = payee;
 
-    const accounts =
-      payeeDefaults[payee] ??
-      getAccountsForPayee(props.txCache.transactions, payee);
+    const accounts = getAccountsForPayee(props.txCache.transactions, payee);
     if (accounts.length === 0) {
       return;
     }
@@ -498,27 +487,6 @@ export const EditTransaction: React.FC<{
       }),
     );
     formik.setFieldValue('lines', newLines);
-  };
-
-  /**
-   * setDefaultForPayee stores the accounts currently entered in the form as the
-   * default for the current payee. Trailing empty lines are dropped so that,
-   * when only one of the income/expense accounts is set, just that account is
-   * stored.
-   */
-  const setDefaultForPayee = (formik: FormikProps<Values>): void => {
-    const accounts = formik.values.lines.map((line) => line.account);
-    while (accounts.length > 0 && accounts[accounts.length - 1] === '') {
-      accounts.pop();
-    }
-    if (accounts.every((account) => account === '')) {
-      return; // Nothing meaningful to store.
-    }
-
-    setPayeeDefaults({ ...payeeDefaults, [formik.values.payee]: accounts });
-    props.savePayeeAccountDefault(formik.values.payee, accounts);
-    // Avoid the next payee blur re-filling and discarding the entered amounts.
-    lastAutofilledPayee.current = formik.values.payee;
   };
 
   const initialValues: Values = {
@@ -769,20 +737,14 @@ export const EditTransaction: React.FC<{
                         >
                           Add Split
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => setDefaultForPayee(formik)}
-                          disabled={formik.values.payee === ''}
-                          title="Save the current accounts as the default for this payee"
-                        >
-                          Set as default for Payee
-                        </button>
+                      </div>
+                      <Margin>
                         <TagSelect
                           tag={formik.values.tag}
                           allTags={props.txCache.tags}
                           onChange={(tag) => formik.setFieldValue('tag', tag)}
                         />
-                      </div>
+                      </Margin>
                     </>
                   )}
                 </FieldArray>

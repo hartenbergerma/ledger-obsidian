@@ -18,9 +18,7 @@ safely in your Obsidian Vault instead.
     additional "Add Split" lines suggest every account so you can enter more
     complex transactions.
   - Selecting a payee that has been used before automatically fills in the
-    account fields based on the most recently used accounts for that payee. Use
-    the "Set as default for Payee" button to remember a specific set of accounts
-    for a payee instead.
+    account fields based on the most recently used accounts for that payee.
 - [x] Obsidian Protocol handling to quickly launch Obsidian and immediately record a transaction
   - Create a Shortcut on mobile to `obsidian://ledger`
 - [x] Dashboard with net-worth and account visualizations, on desktop and mobile.
