@@ -33,18 +33,27 @@ const Legend = styled.div`
   flex-shrink: 1;
 
   .ct-legend {
-    margin: 0;
+    /* A little breathing room above and below the legend block. */
+    margin: 10px 0;
+    text-align: left;
   }
 
   /*
   When there is not enough horizontal room (e.g. on mobile), allow the legend
   entries to wrap onto multiple lines and stack instead of overflowing and
-  forcing the chart to scroll sideways.
+  forcing the chart to scroll sideways. Each entry sits on its own line,
+  left-aligned, with a little space between rows.
   */
   .ct-legend li {
-    display: inline-block;
+    display: block;
+    text-align: left;
     max-width: 100%;
     overflow-wrap: anywhere;
+    margin-bottom: 8px;
+  }
+
+  .ct-legend li:last-child {
+    margin-bottom: 0;
   }
 `;
 
@@ -57,7 +66,7 @@ const ChartTypeSelector = styled.div<{ $mobile: boolean }>`
   ${({ $mobile }) => ($mobile ? 'margin: 8px 0 14px;' : '')}
 `;
 
-const Chart = styled.div`
+const Chart = styled.div<{ $mobile: boolean }>`
   .ct-label {
     color: var(--text-muted);
   }
@@ -77,20 +86,35 @@ const Chart = styled.div`
     cursor: pointer;
   }
 
+  /* There is plenty of horizontal room on desktop, so draw the bars wider
+  (the default is 10px) to make them easier to read and click. */
+  ${({ $mobile }) => ($mobile ? '' : '.ct-bar { stroke-width: 20px; }')}
+
   .ct-point-selected {
     stroke: var(--interactive-accent);
     stroke-width: 14px;
   }
 
-  .ct-bar-selected {
-    stroke: var(--interactive-accent);
-    stroke-width: 12px;
+  /* When a bucket is selected, the bars in the other buckets are faded out so
+  the selected bucket stands out. The selected bars keep their own width and
+  per-account colors so the accounts remain distinguishable. */
+  .ct-bar-faded {
+    opacity: 0.2;
   }
 
   .ct-bar-label,
   .ct-point-label {
     fill: var(--text-normal);
     font-size: 0.7rem;
+    /* Draw a halo in the background color around the glyphs so the label stays
+    legible on top of any bar/series color (e.g. white text on a yellow bar).
+    paint-order: stroke renders the stroke behind the fill, turning it into an
+    outline rather than covering the text. */
+    paint-order: stroke;
+    stroke: var(--background-primary);
+    stroke-width: 3px;
+    stroke-linejoin: round;
+    stroke-linecap: round;
   }
 `;
 
@@ -168,7 +192,7 @@ export const AccountVisualization: React.FC<{
         </Legend>
       </ChartHeader>
 
-      <Chart>{visualization}</Chart>
+      <Chart $mobile={Platform.isMobile}>{visualization}</Chart>
     </>
   );
 };
@@ -288,6 +312,10 @@ const DeltaVisualization: React.FC<{
   const options: IBarChartOptions = {
     height: '300px',
     width: '100%',
+    // Stack the per-account bars on top of each other for each date. Grouping
+    // them side by side becomes unreadable once more than two accounts are
+    // selected, as the bars get too thin and overflow into each other.
+    stackBars: true,
     axisX: {
       labelInterpolationFnc: makeChartLabelFormatter(
         props.interval,
@@ -301,25 +329,35 @@ const DeltaVisualization: React.FC<{
       return;
     }
 
-    // Draw the value of the bar above (or below, for negative values) the bar.
-    // A zero bar means there were no transactions, so we leave it unlabeled.
-    const value = dpoint.value.y;
-    if (value !== 0) {
-      const label = new Chartist.Svg(
-        'text',
-        {
-          x: dpoint.x1,
-          y: value >= 0 ? dpoint.y2 - 6 : dpoint.y2 + 14,
-          'text-anchor': 'middle',
-        },
-        'ct-bar-label',
-      );
-      label.text(formatChartValue(value, props.currencySymbol));
-      dpoint.group.append(label);
+    if (props.selectedSegment && props.selectedSegment.index !== dpoint.index) {
+      // Fade the bars of the buckets that are not selected so the selected
+      // bucket stands out, while leaving the selected bars at their natural
+      // width and per-account color.
+      dpoint.element.addClass('ct-bar-faded');
     }
 
     if (props.selectedSegment?.index === dpoint.index) {
-      dpoint.element.addClass('ct-bar-selected');
+      // The value labels are only shown for the selected date, where one is
+      // drawn for each account's bar so every account's contribution is
+      // visible. The label is centered over the middle of its bar segment so
+      // that, with the bars stacked, lower segments' labels are not hidden
+      // behind the segment above them. A zero bar means there were no
+      // transactions, so we leave it unlabeled.
+      const value = dpoint.value.y;
+      if (value !== 0) {
+        const label = new Chartist.Svg(
+          'text',
+          {
+            x: dpoint.x1,
+            y: (dpoint.y1 + dpoint.y2) / 2,
+            'text-anchor': 'middle',
+            'dominant-baseline': 'middle',
+          },
+          'ct-bar-label',
+        );
+        label.text(formatChartValue(value, props.currencySymbol));
+        dpoint.group.append(label);
+      }
     }
     const node = dpoint.element.getNode();
     node.addEventListener('click', () => {

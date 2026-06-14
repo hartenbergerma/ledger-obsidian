@@ -18,9 +18,34 @@ export interface ChartSegment {
   filterEnd: Moment;
   /** The value of the point/bar that was clicked. */
   value: number;
-  /** A human readable label for the segment, e.g. "Mar 1, 2026". */
+  /** A human readable label for the segment, e.g. "KW15 (23.03.-29.03.26)". */
   label: string;
 }
+
+/**
+ * formatSegmentLabel builds the human readable label shown above the
+ * transaction list for a selected segment. The format depends on the interval:
+ *  - day:   the date itself, e.g. "23.03.26".
+ *  - week:  the calendar week and date range, e.g. "KW15 (23.03.-29.03.26)".
+ *  - month: the month name and date range, e.g. "March (01.03.-31.03.26)".
+ */
+export const formatSegmentLabel = (
+  filterStart: Moment,
+  filterEnd: Moment,
+  interval: Interval,
+): string => {
+  const range = `${filterStart.format('DD.MM.')}-${filterEnd.format(
+    'DD.MM.YY',
+  )}`;
+  switch (interval) {
+    case 'day':
+      return filterEnd.format('DD.MM.YY');
+    case 'week':
+      return `KW${filterEnd.isoWeek()} (${range})`;
+    case 'month':
+      return `${filterEnd.format('MMMM')} (${range})`;
+  }
+};
 
 /**
  * makeChartSegment builds a ChartSegment for the bucket at the provided index.
@@ -38,13 +63,12 @@ export const makeChartSegment = (
 ): ChartSegment => {
   const filterEnd = window.moment(buckets[index]);
   const filterStart = previousBoundary.clone().add(1, 'day');
-  const format = interval === 'month' ? 'MMM YYYY' : 'MMM D, YYYY';
   return {
     index,
     filterStart,
     filterEnd,
     value,
-    label: filterEnd.format(format),
+    label: formatSegmentLabel(filterStart, filterEnd, interval),
   };
 };
 

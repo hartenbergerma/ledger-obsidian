@@ -45,6 +45,13 @@ const Chart = styled.div`
   .ct-point-label {
     fill: var(--text-normal);
     font-size: 0.7rem;
+    /* Halo in the background color so the value stays legible over the line
+    and grid. See AccountVisualization for details. */
+    paint-order: stroke;
+    stroke: var(--background-primary);
+    stroke-width: 3px;
+    stroke-linejoin: round;
+    stroke-linecap: round;
   }
 `;
 
