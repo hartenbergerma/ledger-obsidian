@@ -33,18 +33,27 @@ const Legend = styled.div`
   flex-shrink: 1;
 
   .ct-legend {
-    margin: 0;
+    /* A little breathing room above and below the legend block. */
+    margin: 10px 0;
+    text-align: left;
   }
 
   /*
   When there is not enough horizontal room (e.g. on mobile), allow the legend
   entries to wrap onto multiple lines and stack instead of overflowing and
-  forcing the chart to scroll sideways.
+  forcing the chart to scroll sideways. Each entry sits on its own line,
+  left-aligned, with a little space between rows.
   */
   .ct-legend li {
-    display: inline-block;
+    display: block;
+    text-align: left;
     max-width: 100%;
     overflow-wrap: anywhere;
+    margin-bottom: 8px;
+  }
+
+  .ct-legend li:last-child {
+    margin-bottom: 0;
   }
 `;
 
@@ -57,7 +66,7 @@ const ChartTypeSelector = styled.div<{ $mobile: boolean }>`
   ${({ $mobile }) => ($mobile ? 'margin: 8px 0 14px;' : '')}
 `;
 
-const Chart = styled.div`
+const Chart = styled.div<{ $mobile: boolean }>`
   .ct-label {
     color: var(--text-muted);
   }
@@ -76,6 +85,10 @@ const Chart = styled.div`
   .ct-bar {
     cursor: pointer;
   }
+
+  /* There is plenty of horizontal room on desktop, so draw the bars wider
+  (the default is 10px) to make them easier to read and click. */
+  ${({ $mobile }) => ($mobile ? '' : '.ct-bar { stroke-width: 20px; }')}
 
   .ct-point-selected {
     stroke: var(--interactive-accent);
@@ -168,7 +181,7 @@ export const AccountVisualization: React.FC<{
         </Legend>
       </ChartHeader>
 
-      <Chart>{visualization}</Chart>
+      <Chart $mobile={Platform.isMobile}>{visualization}</Chart>
     </>
   );
 };
@@ -310,16 +323,19 @@ const DeltaVisualization: React.FC<{
 
       // The value labels are only shown for the selected date, where one is
       // drawn for each account's bar so every account's contribution is
-      // visible. A zero bar means there were no transactions, so we leave it
-      // unlabeled.
+      // visible. The label is centered over the middle of its bar segment so
+      // that, with the bars stacked, lower segments' labels are not hidden
+      // behind the segment above them. A zero bar means there were no
+      // transactions, so we leave it unlabeled.
       const value = dpoint.value.y;
       if (value !== 0) {
         const label = new Chartist.Svg(
           'text',
           {
             x: dpoint.x1,
-            y: value >= 0 ? dpoint.y2 - 6 : dpoint.y2 + 14,
+            y: (dpoint.y1 + dpoint.y2) / 2,
             'text-anchor': 'middle',
+            'dominant-baseline': 'middle',
           },
           'ct-bar-label',
         );

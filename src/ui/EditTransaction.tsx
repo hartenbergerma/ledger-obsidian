@@ -109,8 +109,6 @@ const ExpenseLineStyle = styled.div`
   .arrow {
     width: 0;
     height: 0;
-    position: relative;
-    top: 4px;
     border-top: 8px solid transparent;
     border-bottom: 8px solid transparent;
     border-left: 10px solid var(--text-muted);
@@ -290,15 +288,18 @@ const ExpenseLine: React.FC<{
 
 const SwapButtonStyle = styled.div`
   display: flex;
-  justify-content: center;
-  margin: -3px 0;
+  justify-content: flex-start;
+  /* Sit in the gutter between the two rows' expand/collapse triangles and
+     pull the account fields a little closer together (rather than taking up a
+     full row of its own). */
+  margin: -9px 0;
 
   .swapButton {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: 20px;
+    height: 22px;
     border-radius: 4px;
     cursor: pointer;
     color: var(--text-muted);
