@@ -106,6 +106,15 @@ const Chart = styled.div<{ $mobile: boolean }>`
   .ct-point-label {
     fill: var(--text-normal);
     font-size: 0.7rem;
+    /* Draw a halo in the background color around the glyphs so the label stays
+    legible on top of any bar/series color (e.g. white text on a yellow bar).
+    paint-order: stroke renders the stroke behind the fill, turning it into an
+    outline rather than covering the text. */
+    paint-order: stroke;
+    stroke: var(--background-primary);
+    stroke-width: 3px;
+    stroke-linejoin: round;
+    stroke-linecap: round;
   }
 `;
 
