@@ -295,21 +295,28 @@ const ExpenseLine: React.FC<{
 
 const SwapButtonStyle = styled.div`
   display: flex;
-  justify-content: flex-start;
-  /* Sit in the gutter between the two rows' expand/collapse triangles and
-     pull the account fields a little closer together (rather than taking up a
-     full row of its own). */
-  margin: -9px 0;
+  justify-content: center;
+  /* Pull the button up so it straddles the gap between the two account boxes
+     and overlaps their edges. The negative margins offset the button's height
+     so it does not add to the spacing between the boxes (the original, smaller
+     button used -9px). It sits above the boxes via z-index. */
+  margin: -13px 0;
+  position: relative;
+  z-index: 1;
 
   .swapButton {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 20px;
-    height: 22px;
-    border-radius: 4px;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
     cursor: pointer;
     color: var(--text-muted);
+    /* A solid circular frame so the badge reads clearly where it overlaps the
+       account boxes. */
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
   }
 
   .swapButton:hover {
@@ -329,8 +336,8 @@ const SwapAccounts: React.FC<{ onClick: () => void }> = ({
   <SwapButtonStyle>
     <div className="swapButton" onClick={onClick} title="Swap accounts">
       <svg
-        width="18"
-        height="18"
+        width="20"
+        height="20"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
@@ -712,7 +719,9 @@ export const EditTransaction: React.FC<{
                   <Margin className="flexGrow">
                     <RequiredField
                       error={
-                        formik.touched.total ? formik.errors.total : undefined
+                        formik.touched.total && formik.values.total === ''
+                          ? 'Required'
+                          : undefined
                       }
                     >
                       <Field
@@ -732,7 +741,9 @@ export const EditTransaction: React.FC<{
                   <Margin>
                     <RequiredField
                       error={
-                        formik.touched.payee ? formik.errors.payee : undefined
+                        formik.touched.payee && formik.values.payee === ''
+                          ? 'Required'
+                          : undefined
                       }
                     >
                       <Field
