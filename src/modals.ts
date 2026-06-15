@@ -3,7 +3,7 @@ import LedgerPlugin from './main';
 import { EnhancedTransaction } from './parser';
 import { emptyTransaction } from './transaction-utils';
 import { EditTransaction } from './ui/EditTransaction';
-import { App, Modal, Notice } from 'obsidian';
+import { App, Modal } from 'obsidian';
 import React from 'react';
 import ReactDOM from 'react-dom';
 
@@ -93,12 +93,6 @@ export class AddExpenseModal extends Modal {
         operation: this.operation,
         updater: this.updater,
         txCache: this.plugin.txCache,
-        payeeAccountDefaults: this.plugin.settings.payeeAccountDefaults,
-        savePayeeAccountDefault: (payee: string, accounts: string[]): void => {
-          this.plugin.settings.payeeAccountDefaults[payee] = accounts;
-          this.plugin.saveData(this.plugin.settings);
-          new Notice(`Saved default accounts for "${payee}"`);
-        },
         close: () => this.close(),
       }),
       this.contentEl,

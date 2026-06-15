@@ -697,7 +697,7 @@ describe('parsing a ledger file', () => {
       const contents = `2021/04/20 Obsidian
       e:Spending Money    $20.00
       b:CreditUnion       $-20.00
-      
+
 2021/04/21   Food Co-op
       e:Food:Groceries    $45.00
       b:CreditUnion       $-45.00
@@ -710,6 +710,35 @@ describe('parsing a ledger file', () => {
       expect(txCache.accounts[0]).toEqual('b:CreditUnion');
       expect(txCache.accounts[1]).toEqual('e:Food:Groceries');
       expect(txCache.accounts[2]).toEqual('e:Spending Money');
+    });
+  });
+  describe('tags are populated correctly', () => {
+    test('tags are collected, deduplicated, and sorted', () => {
+      const contents = `2021/04/20 Obsidian    ; #software
+      e:Spending Money    $20.00
+      b:CreditUnion       $-20.00
+
+2021/04/21   Food Co-op    ; weekly #groceries
+      e:Food:Groceries    $45.00
+      b:CreditUnion       $-45.00
+
+2021/04/22   Food Co-op    ; #groceries
+      e:Food:Groceries    $25.00
+      b:CreditUnion       $-25.00
+
+2021/04/23   Gas
+      e:Auto    $30.00
+      b:CreditUnion       $-30.00`;
+      const txCache = parse(contents, settings);
+      expect(txCache.parsingErrors).toEqual([]);
+      expect(txCache.tags).toEqual(['groceries', 'software']);
+    });
+    test('a file with no tags has an empty tag list', () => {
+      const contents = `2021/04/20 Obsidian
+      e:Spending Money    $20.00
+      b:CreditUnion       $-20.00`;
+      const txCache = parse(contents, settings);
+      expect(txCache.tags).toEqual([]);
     });
   });
   describe('aliases are parsed and used correctly', () => {

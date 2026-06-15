@@ -21,6 +21,18 @@ Transaction Entry Modal
   overflow-y: auto !important;
 }
 
+/* Move the content (heading + form) up within the window so there is less
+ * empty space between the top of the window and the "Add to Ledger" text. The
+ * close "x" is positioned separately and stays in the corner. Increase this
+ * value to push the content down, decrease it to move the content further up. */
+.is-mobile .ledger-modal .modal-content {
+  padding-top: 0px;
+}
+
+.is-mobile .ledger-modal h2 {
+  margin-top: 0.2em;
+}
+
 .is-mobile .remove-row {
   margin: 11px 4px 11px 0 !important;
 }

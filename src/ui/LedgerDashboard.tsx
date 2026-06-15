@@ -136,6 +136,9 @@ const MobileDashboard: React.FC<{
     useDateRange(props.txCache, 'month');
   const [selectedAccounts, setSelectedAccounts] = React.useState<string[]>([]);
   const [accountsExpanded, setAccountsExpanded] = React.useState(false);
+  const [selectedTag, setSelectedTag] = React.useState<string | null>(null);
+  const toggleTag = (tag: string): void =>
+    setSelectedTag((prev) => (prev === tag ? null : tag));
   const [selectedSegment, setSelectedSegment] =
     React.useState<ChartSegment | null>(null);
 
@@ -144,6 +147,14 @@ const MobileDashboard: React.FC<{
   React.useEffect(() => {
     setSelectedSegment(null);
   }, [dateRange, selectedAccounts]);
+
+  // Clear the tag filter if the selected tag no longer exists (e.g. the last
+  // transaction with that tag was deleted or had its tag changed).
+  React.useEffect(() => {
+    if (selectedTag && !props.txCache.tags.includes(selectedTag)) {
+      setSelectedTag(null);
+    }
+  }, [props.txCache.tags, selectedTag]);
 
   return (
     <MobileStyles>
@@ -207,6 +218,8 @@ const MobileDashboard: React.FC<{
         txCache={props.txCache}
         updater={props.updater}
         selectedAccounts={selectedAccounts}
+        selectedTag={selectedTag}
+        onToggleTag={toggleTag}
         startDate={startDate}
         endDate={endDate}
         segment={selectedSegment}
@@ -227,6 +240,9 @@ const DesktopDashboard: React.FC<{
   const { dateRange, setDateRange, startDate, endDate, interval } =
     useDateRange(props.txCache, 'month');
   const [selectedAccounts, setSelectedAccounts] = React.useState<string[]>([]);
+  const [selectedTag, setSelectedTag] = React.useState<string | null>(null);
+  const toggleTag = (tag: string): void =>
+    setSelectedTag((prev) => (prev === tag ? null : tag));
   const [selectedSegment, setSelectedSegment] =
     React.useState<ChartSegment | null>(null);
 
@@ -235,6 +251,14 @@ const DesktopDashboard: React.FC<{
   React.useEffect(() => {
     setSelectedSegment(null);
   }, [dateRange, selectedAccounts]);
+
+  // Clear the tag filter if the selected tag no longer exists (e.g. the last
+  // transaction with that tag was deleted or had its tag changed).
+  React.useEffect(() => {
+    if (selectedTag && !props.txCache.tags.includes(selectedTag)) {
+      setSelectedTag(null);
+    }
+  }, [props.txCache.tags, selectedTag]);
 
   return (
     <>
@@ -282,6 +306,8 @@ const DesktopDashboard: React.FC<{
                 currencySymbol={props.settings.currencySymbol}
                 txCache={props.txCache}
                 updater={props.updater}
+                selectedTag={selectedTag}
+                onToggleTag={toggleTag}
                 startDate={startDate}
                 endDate={endDate}
                 segment={selectedSegment}
@@ -309,6 +335,8 @@ const DesktopDashboard: React.FC<{
                 setSelectedAccount={(account: string) =>
                   setSelectedAccounts([account])
                 }
+                selectedTag={selectedTag}
+                onToggleTag={toggleTag}
                 startDate={startDate}
                 endDate={endDate}
                 segment={selectedSegment}

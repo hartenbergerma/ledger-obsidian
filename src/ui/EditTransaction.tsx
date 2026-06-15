@@ -6,11 +6,15 @@ import {
   TransactionCache,
 } from '../parser';
 import {
+  formatComment,
   formatTransaction,
   getAccountsForPayee,
+  getMemoFromComment,
   getTotalAsNum,
+  getTransactionTag,
 } from '../transaction-utils';
 import { CurrencyInputFormik } from './CurrencyInput';
+import { TagSelect } from './Tag';
 import { TextSuggest } from './TextSuggest';
 import {
   ErrorMessage,
@@ -38,6 +42,9 @@ const ButtonGroupStyle = styled.div`
     margin-right: 0;
     flex-grow: 1;
     flex-basis: 1;
+    /* A little taller and larger so the type selector is easy to tap. */
+    padding: 10px 0;
+    font-size: 1.05em;
   }
 
   .button:first-child {
@@ -288,25 +295,32 @@ const ExpenseLine: React.FC<{
 
 const SwapButtonStyle = styled.div`
   display: flex;
-  justify-content: flex-start;
-  /* Sit in the gutter between the two rows' expand/collapse triangles and
-     pull the account fields a little closer together (rather than taking up a
-     full row of its own). */
-  margin: -9px 0;
+  justify-content: center;
+  /* Pull the button up so it straddles the gap between the two account boxes
+     and overlaps their edges. The negative margins offset the button's height
+     so it does not add to the spacing between the boxes (the original, smaller
+     button used -9px). It sits above the boxes via z-index. */
+  margin: -20px 0;
+  position: relative;
+  z-index: 1;
 
   .swapButton {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 20px;
-    height: 22px;
-    border-radius: 4px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
     cursor: pointer;
     color: var(--text-muted);
+    /* A solid circular frame so the badge reads clearly where it overlaps the
+       account boxes. */
+    background: var(--background-secondary);
+    border: 3px solid var(--background-modifier-border);
   }
 
   .swapButton:hover {
-    background: var(--background-secondary-alt);
+    background: var(--background-secondary);
     color: var(--text-normal);
   }
 `;
@@ -322,8 +336,8 @@ const SwapAccounts: React.FC<{ onClick: () => void }> = ({
   <SwapButtonStyle>
     <div className="swapButton" onClick={onClick} title="Swap accounts">
       <svg
-        width="18"
-        height="18"
+        width="20"
+        height="20"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
@@ -377,15 +391,64 @@ const FormStyles = styled.div`
   .splitButtons {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: 10px;
     /* Give the buttons a bit of room below the account fields. */
     margin: 16px 8px 8px;
+  }
+
+  /* Space the Back and Submit buttons apart so they are not flush together. */
+  .formButtons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  /* A required field that is missing a value shows a "!" to its left rather
+   * than error text below it, so the layout does not shift vertically. */
+  .ledger-required-field {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .ledger-required-field > *:last-child {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .ledger-required-marker {
+    flex-shrink: 0;
+    color: var(--text-error);
+    font-weight: bold;
+    font-size: 1.2em;
+    line-height: 1;
+    cursor: default;
   }
 
   input {
     width: 100%;
   }
 `;
+
+/**
+ * RequiredField wraps a form field and, when an error is present, shows a "!"
+ * marker to the left of the field instead of error text below it. This keeps
+ * the form from shifting vertically when validation fails.
+ */
+const RequiredField: React.FC<{ error?: string }> = ({
+  error,
+  children,
+}): JSX.Element => (
+  <div className="ledger-required-field">
+    {error ? (
+      <span className="ledger-required-marker" title={error} aria-label={error}>
+        !
+      </span>
+    ) : null}
+    {children}
+  </div>
+);
 
 /**
  * Line is analagous to EnhancedExpenseLine, however the types are slightly
@@ -415,6 +478,12 @@ export interface Values {
   date: string;
   total: string;
   lines: Line[];
+
+  /**
+   * tag is the (single) tag applied to this transaction, without the leading
+   * `#`. An empty string means the transaction is untagged.
+   */
+  tag: string;
 }
 
 interface ValueErrors {
@@ -431,18 +500,10 @@ export const EditTransaction: React.FC<{
   operation: Operation;
   updater: LedgerModifier;
   txCache: TransactionCache;
-  payeeAccountDefaults: Record<string, string[]>;
-  savePayeeAccountDefault: (payee: string, accounts: string[]) => void;
   close: () => void;
 }> = (props): JSX.Element => {
   const isNew = props.operation === 'new';
   const [page, setPage] = React.useState(1);
-
-  // Local copy of the payee account defaults so that defaults set during this
-  // session are reflected immediately by the auto-fill.
-  const [payeeDefaults, setPayeeDefaults] = React.useState(
-    props.payeeAccountDefaults,
-  );
 
   // Tracks the payee that the account fields were last auto-filled for, so that
   // simply re-focusing the payee field does not clobber edits the user has
@@ -453,10 +514,9 @@ export const EditTransaction: React.FC<{
   );
 
   /**
-   * applyPayeeAccountDefaults pre-fills the account fields based on the
-   * accounts most recently used with the provided payee (or an explicit default
-   * set with "Set as default for Payee"). Only applies to new transactions and
-   * only when the payee actually changes.
+   * applyPayeeAccountDefaults pre-fills the account fields based on the accounts
+   * most recently used with the provided payee. Only applies to new
+   * transactions and only when the payee actually changes.
    */
   const applyPayeeAccountDefaults = (
     formik: FormikProps<Values>,
@@ -467,9 +527,7 @@ export const EditTransaction: React.FC<{
     }
     lastAutofilledPayee.current = payee;
 
-    const accounts =
-      payeeDefaults[payee] ??
-      getAccountsForPayee(props.txCache.transactions, payee);
+    const accounts = getAccountsForPayee(props.txCache.transactions, payee);
     if (accounts.length === 0) {
       return;
     }
@@ -490,27 +548,6 @@ export const EditTransaction: React.FC<{
     formik.setFieldValue('lines', newLines);
   };
 
-  /**
-   * setDefaultForPayee stores the accounts currently entered in the form as the
-   * default for the current payee. Trailing empty lines are dropped so that,
-   * when only one of the income/expense accounts is set, just that account is
-   * stored.
-   */
-  const setDefaultForPayee = (formik: FormikProps<Values>): void => {
-    const accounts = formik.values.lines.map((line) => line.account);
-    while (accounts.length > 0 && accounts[accounts.length - 1] === '') {
-      accounts.pop();
-    }
-    if (accounts.every((account) => account === '')) {
-      return; // Nothing meaningful to store.
-    }
-
-    setPayeeDefaults({ ...payeeDefaults, [formik.values.payee]: accounts });
-    props.savePayeeAccountDefault(formik.values.payee, accounts);
-    // Avoid the next payee blur re-filling and discarding the entered amounts.
-    lastAutofilledPayee.current = formik.values.payee;
-  };
-
   const initialValues: Values = {
     payee: isNew ? '' : props.initialState.value.payee,
     txType: isNew ? 'expense' : 'unknown',
@@ -518,6 +555,7 @@ export const EditTransaction: React.FC<{
       ? window.moment().format('YYYY-MM-DD')
       : window.moment(props.initialState.value.date).format('YYYY-MM-DD'),
     total: isNew ? '' : getTotalAsNum(props.initialState).toString(),
+    tag: isNew ? '' : getTransactionTag(props.initialState),
     lines: isNew
       ? [
           {
@@ -620,6 +658,11 @@ export const EditTransaction: React.FC<{
             localPayee = `${from} to ${to}`;
           }
 
+          // Preserve any existing memo text in the transaction comment while
+          // applying the (possibly changed or cleared) tag.
+          const memo = getMemoFromComment(props.initialState.value.comment);
+          const comment = formatComment(memo, values.tag ? [values.tag] : []);
+
           // This tx is not fully valid because we are not specifying a valid block.
           // It's only complete enough that we can format it into a string.
           const newTx: EnhancedTransaction = {
@@ -638,7 +681,7 @@ export const EditTransaction: React.FC<{
                 lineToEnhancedExpenseLine(line),
               ),
               check: props.initialState.value.check,
-              comment: props.initialState.value.comment,
+              comment,
             },
           };
 
@@ -674,32 +717,45 @@ export const EditTransaction: React.FC<{
                 </Margin>
                 <div className="flexRow">
                   <Margin className="flexGrow">
-                    <Field
-                      component={CurrencyInputFormik}
-                      currencySymbol={props.currencySymbol}
-                      name="total"
-                      placeholder="Total Amount"
-                    />
-                    <ErrorMessage name="total" component="div" />
+                    <RequiredField
+                      error={
+                        formik.touched.total && formik.values.total === ''
+                          ? 'Required'
+                          : undefined
+                      }
+                    >
+                      <Field
+                        component={CurrencyInputFormik}
+                        currencySymbol={props.currencySymbol}
+                        name="total"
+                        placeholder="Total Amount"
+                      />
+                    </RequiredField>
                   </Margin>
                   <Margin className="flexShrink">on</Margin>
                   <Margin className="dateField">
                     <Field type="date" name="date" />
-                    <ErrorMessage name="date" component="div" />
                   </Margin>
                 </div>
                 {formik.values.txType !== 'transfer' && (
                   <Margin>
-                    <Field
-                      component={TextSuggest}
-                      name="payee"
-                      placeholder="Payee (e.g. Obsidian.md)"
-                      suggestions={props.txCache.payees}
-                      onSelectValue={(payee: string) =>
-                        applyPayeeAccountDefaults(formik, payee)
+                    <RequiredField
+                      error={
+                        formik.touched.payee && formik.values.payee === ''
+                          ? 'Required'
+                          : undefined
                       }
-                    />
-                    <ErrorMessage name="payee" component="div" />
+                    >
+                      <Field
+                        component={TextSuggest}
+                        name="payee"
+                        placeholder="Payee (e.g. Obsidian.md)"
+                        suggestions={props.txCache.payees}
+                        onSelectValue={(payee: string) =>
+                          applyPayeeAccountDefaults(formik, payee)
+                        }
+                      />
+                    </RequiredField>
                   </Margin>
                 )}
               </>
@@ -753,14 +809,11 @@ export const EditTransaction: React.FC<{
                         >
                           Add Split
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => setDefaultForPayee(formik)}
-                          disabled={formik.values.payee === ''}
-                          title="Save the current accounts as the default for this payee"
-                        >
-                          Set as default for Payee
-                        </button>
+                        <TagSelect
+                          tag={formik.values.tag}
+                          allTags={props.txCache.tags}
+                          onChange={(tag) => formik.setFieldValue('tag', tag)}
+                        />
                       </div>
                     </>
                   )}
@@ -803,7 +856,7 @@ export const EditTransaction: React.FC<{
                 </button>
               )}
               {page === 2 && (
-                <>
+                <div className="formButtons">
                   <button
                     type="button"
                     onClick={() => {
@@ -815,7 +868,7 @@ export const EditTransaction: React.FC<{
                   <button type="submit" disabled={formik.isSubmitting}>
                     Submit
                   </button>
-                </>
+                </div>
               )}
             </Margin>
           </Form>

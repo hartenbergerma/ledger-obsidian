@@ -1,7 +1,11 @@
 import grammar from '../grammar/ledger';
 import { Error, TxError } from './error';
 import { ISettings } from './settings';
-import { dealiasAccount, firstDate } from './transaction-utils';
+import {
+  dealiasAccount,
+  firstDate,
+  getTagsFromComment,
+} from './transaction-utils';
 import { flatMap, sortedUniq } from 'lodash';
 import { Moment } from 'moment';
 import { Grammar, Parser } from 'nearley';
@@ -16,6 +20,13 @@ export interface TransactionCache {
   transactions: EnhancedTransaction[];
   firstDate: Moment;
   payees: string[];
+
+  /**
+   * tags contains a sorted, deduplicated list of all tags (hashtag-style labels
+   * stored in transaction comments, e.g. `#vacation`) used in the file.
+   */
+  tags: string[];
+
   aliases: Map<string, string>;
 
   /**
@@ -289,6 +300,11 @@ export const parse = (
       .map(({ value }) => value.payee)
       .sort((a, b) => (a.toLowerCase() > b.toLowerCase() ? 1 : -1)),
   );
+  const tags = sortedUniq(
+    flatMap(txs, ({ value }) => getTagsFromComment(value.comment)).sort(
+      (a, b) => (a.toLowerCase() > b.toLowerCase() ? 1 : -1),
+    ),
+  );
   const usedAccounts = flatMap(txs, ({ value }) =>
     value.expenselines.flatMap((line) =>
       'dealiasedAccount' in line ? [line.dealiasedAccount] : [],
@@ -342,6 +358,7 @@ export const parse = (
     rawAccountDeclarations: accountDeclarations,
     transactions: txs,
     payees,
+    tags,
     accounts,
     parsingErrors: errors,
 
