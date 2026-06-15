@@ -300,7 +300,7 @@ const SwapButtonStyle = styled.div`
      and overlaps their edges. The negative margins offset the button's height
      so it does not add to the spacing between the boxes (the original, smaller
      button used -9px). It sits above the boxes via z-index. */
-  margin: -13px 0;
+  margin: -20px 0;
   position: relative;
   z-index: 1;
 
@@ -308,19 +308,19 @@ const SwapButtonStyle = styled.div`
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 30px;
-    height: 30px;
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
     cursor: pointer;
     color: var(--text-muted);
     /* A solid circular frame so the badge reads clearly where it overlaps the
        account boxes. */
-    background: var(--background-primary);
-    border: 1px solid var(--background-modifier-border);
+    background: var(--background-secondary);
+    border: 3px solid var(--background-modifier-border);
   }
 
   .swapButton:hover {
-    background: var(--background-secondary-alt);
+    background: var(--background-secondary);
     color: var(--text-normal);
   }
 `;

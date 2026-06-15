@@ -26,7 +26,7 @@ Transaction Entry Modal
  * close "x" is positioned separately and stays in the corner. Increase this
  * value to push the content down, decrease it to move the content further up. */
 .is-mobile .ledger-modal .modal-content {
-  padding-top: 10px;
+  padding-top: 0px;
 }
 
 .is-mobile .ledger-modal h2 {
