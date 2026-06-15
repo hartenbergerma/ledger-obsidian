@@ -15,10 +15,19 @@ Transaction Entry Modal
 
 .is-mobile .ledger-modal {
   margin-top: 8px;
-  top: 128px !important;
+  /* How far down from the top of the screen the "Add to Ledger" window sits.
+   * Lower this value to move the whole window further up, raise it to move it
+   * down. */
+  top: 40px !important;
   transform: none !important;
   max-height: calc(100vh - 16px) !important;
   overflow-y: auto !important;
+}
+
+/* Pull the "Add to Ledger" heading up so there is less empty space between the
+ * top of the window and the text. */
+.is-mobile .ledger-modal h2 {
+  margin-top: 0.2em;
 }
 
 .is-mobile .remove-row {

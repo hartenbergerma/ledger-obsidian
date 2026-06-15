@@ -105,6 +105,11 @@ const MobileTxListStyle = styled.div`
     overflow-wrap: anywhere;
   }
 
+  /* Space between the payee name and its tag pill. */
+  .mobile-tx-payee-name {
+    margin-right: 8px;
+  }
+
   .mobile-tx-total {
     flex-shrink: 0;
     margin-left: 8px;
@@ -256,7 +261,7 @@ export const MobileTransactionEntry: React.FC<{
     <div className="mobile-tx-card">
       <div className="mobile-tx-row">
         <span className="mobile-tx-payee">
-          {props.tx.value.payee}
+          <span className="mobile-tx-payee-name">{props.tx.value.payee}</span>
           {tags.map((tag) => (
             <TagPill
               key={tag}
@@ -315,11 +320,14 @@ const TableStyles = styled.div`
     }
   }
 
-  tr:hover svg {
+  /* These rules style the edit/delete action icons, which live in the last
+   * column. They are scoped to that column so they do not affect the tag icon
+   * rendered in the payee column. */
+  tr:hover td:last-child svg {
     fill: var(--text-muted);
   }
 
-  svg {
+  td:last-child svg {
     margin-left: 10px;
     cursor: pointer;
     fill: none;
@@ -334,11 +342,12 @@ const TableStyles = styled.div`
   .ledger-tx-payee-cell {
     display: inline-flex;
     flex-wrap: wrap;
+    /* Vertically center the tag pill against the payee text. */
     align-items: center;
   }
 
   .ledger-tx-payee-name {
-    margin-right: 4px;
+    margin-right: 8px;
   }
 `;
 

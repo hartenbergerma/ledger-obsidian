@@ -2,11 +2,11 @@ import { sanitizeTag } from '../transaction-utils';
 import React from 'react';
 import styled from 'styled-components';
 
-const TagIcon: React.FC = (): JSX.Element => (
+const TagIcon: React.FC<{ size?: number }> = ({ size = 10 }): JSX.Element => (
   <svg
     className="ledger-tag-icon"
-    width="10"
-    height="10"
+    width={size}
+    height={size}
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
@@ -39,6 +39,11 @@ const TagPillStyle = styled.span`
   .ledger-tag-icon {
     flex-shrink: 0;
     opacity: 0.75;
+    /* Be explicit so the icon is unaffected by surrounding svg rules (e.g. the
+     * action icons in the transaction table set stroke/fill to none). */
+    margin: 0;
+    fill: none;
+    stroke: currentColor;
   }
 
   .ledger-tag-label {
@@ -128,16 +133,32 @@ const TagSelectStyle = styled.div`
   align-items: flex-start;
   gap: 6px;
 
+  /* When the picker panel is open, take a full row of the button group so the
+   * panel drops onto its own line instead of stretching the "Add Split" row. */
+  &.ledger-tag-select-open {
+    flex-basis: 100%;
+  }
+
   .ledger-tag-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     margin: 0;
+    /* Square-ish icon button that matches the height of the adjacent buttons. */
+    padding: 6px 10px;
+  }
+
+  .ledger-tag-button .ledger-tag-icon {
+    fill: none;
+    stroke: currentColor;
   }
 
   .ledger-tag-panel {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    width: 100%;
-    max-width: 320px;
+    width: 240px;
+    max-width: 100%;
     padding: 8px;
     background: var(--background-primary);
     border: 1px solid var(--background-modifier-border);
@@ -240,15 +261,16 @@ export const TagSelect: React.FC<{
             window.setTimeout(() => inputRef.current?.focus(), 0);
           }}
           title="Tag this transaction"
+          aria-label="Tag this transaction"
         >
-          + Tag
+          <TagIcon size={18} />
         </button>
       </TagSelectStyle>
     );
   }
 
   return (
-    <TagSelectStyle>
+    <TagSelectStyle className="ledger-tag-select-open">
       <div className="ledger-tag-panel">
         <input
           ref={inputRef}

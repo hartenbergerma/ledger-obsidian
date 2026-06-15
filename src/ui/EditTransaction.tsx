@@ -42,6 +42,9 @@ const ButtonGroupStyle = styled.div`
     margin-right: 0;
     flex-grow: 1;
     flex-basis: 1;
+    /* A little taller and larger so the type selector is easy to tap. */
+    padding: 10px 0;
+    font-size: 1.05em;
   }
 
   .button:first-child {
@@ -381,15 +384,64 @@ const FormStyles = styled.div`
   .splitButtons {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: 10px;
     /* Give the buttons a bit of room below the account fields. */
     margin: 16px 8px 8px;
+  }
+
+  /* Space the Back and Submit buttons apart so they are not flush together. */
+  .formButtons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  /* A required field that is missing a value shows a "!" to its left rather
+   * than error text below it, so the layout does not shift vertically. */
+  .ledger-required-field {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .ledger-required-field > *:last-child {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .ledger-required-marker {
+    flex-shrink: 0;
+    color: var(--text-error);
+    font-weight: bold;
+    font-size: 1.2em;
+    line-height: 1;
+    cursor: default;
   }
 
   input {
     width: 100%;
   }
 `;
+
+/**
+ * RequiredField wraps a form field and, when an error is present, shows a "!"
+ * marker to the left of the field instead of error text below it. This keeps
+ * the form from shifting vertically when validation fails.
+ */
+const RequiredField: React.FC<{ error?: string }> = ({
+  error,
+  children,
+}): JSX.Element => (
+  <div className="ledger-required-field">
+    {error ? (
+      <span className="ledger-required-marker" title={error} aria-label={error}>
+        !
+      </span>
+    ) : null}
+    {children}
+  </div>
+);
 
 /**
  * Line is analagous to EnhancedExpenseLine, however the types are slightly
@@ -658,32 +710,41 @@ export const EditTransaction: React.FC<{
                 </Margin>
                 <div className="flexRow">
                   <Margin className="flexGrow">
-                    <Field
-                      component={CurrencyInputFormik}
-                      currencySymbol={props.currencySymbol}
-                      name="total"
-                      placeholder="Total Amount"
-                    />
-                    <ErrorMessage name="total" component="div" />
+                    <RequiredField
+                      error={
+                        formik.touched.total ? formik.errors.total : undefined
+                      }
+                    >
+                      <Field
+                        component={CurrencyInputFormik}
+                        currencySymbol={props.currencySymbol}
+                        name="total"
+                        placeholder="Total Amount"
+                      />
+                    </RequiredField>
                   </Margin>
                   <Margin className="flexShrink">on</Margin>
                   <Margin className="dateField">
                     <Field type="date" name="date" />
-                    <ErrorMessage name="date" component="div" />
                   </Margin>
                 </div>
                 {formik.values.txType !== 'transfer' && (
                   <Margin>
-                    <Field
-                      component={TextSuggest}
-                      name="payee"
-                      placeholder="Payee (e.g. Obsidian.md)"
-                      suggestions={props.txCache.payees}
-                      onSelectValue={(payee: string) =>
-                        applyPayeeAccountDefaults(formik, payee)
+                    <RequiredField
+                      error={
+                        formik.touched.payee ? formik.errors.payee : undefined
                       }
-                    />
-                    <ErrorMessage name="payee" component="div" />
+                    >
+                      <Field
+                        component={TextSuggest}
+                        name="payee"
+                        placeholder="Payee (e.g. Obsidian.md)"
+                        suggestions={props.txCache.payees}
+                        onSelectValue={(payee: string) =>
+                          applyPayeeAccountDefaults(formik, payee)
+                        }
+                      />
+                    </RequiredField>
                   </Margin>
                 )}
               </>
@@ -737,14 +798,12 @@ export const EditTransaction: React.FC<{
                         >
                           Add Split
                         </button>
-                      </div>
-                      <Margin>
                         <TagSelect
                           tag={formik.values.tag}
                           allTags={props.txCache.tags}
                           onChange={(tag) => formik.setFieldValue('tag', tag)}
                         />
-                      </Margin>
+                      </div>
                     </>
                   )}
                 </FieldArray>
@@ -786,7 +845,7 @@ export const EditTransaction: React.FC<{
                 </button>
               )}
               {page === 2 && (
-                <>
+                <div className="formButtons">
                   <button
                     type="button"
                     onClick={() => {
@@ -798,7 +857,7 @@ export const EditTransaction: React.FC<{
                   <button type="submit" disabled={formik.isSubmitting}>
                     Submit
                   </button>
-                </>
+                </div>
               )}
             </Margin>
           </Form>
