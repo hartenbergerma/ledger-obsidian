@@ -44,8 +44,10 @@ safely in your Obsidian Vault instead.
   - Transactions created from a recurring schedule are marked with the recurring
     (↻) icon next to the payee in the transaction list.
   - Schedules are stored in your ledger file using Ledger's periodic-transaction
-    (`~`) syntax in a managed region above your transactions, so they remain
-    readable and compatible with the Ledger CLI.
+    (`~`) syntax, so they remain readable and compatible with the Ledger CLI and
+    hledger. New ones are placed under a `# recurring transactions` section just
+    before your transactions, but they are recognized wherever they appear in
+    the file (like hledger), with or without `#` section headings.
 - [ ] Reporting (In progress!)
 - [ ] Account reconciliation (planned soon!)
 

@@ -740,6 +740,7 @@ export const EditTransaction: React.FC<{
               payee: localPayee,
               comment,
               expenselines,
+              block: recurringEdit ? recurringEdit.block : undefined,
             };
             props.updater.saveRecurring(rt).then(props.close);
             return;

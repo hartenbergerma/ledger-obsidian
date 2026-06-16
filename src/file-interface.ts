@@ -9,12 +9,10 @@ import { EnhancedTransaction, parse, TransactionCache } from './parser';
 import {
   advanceSchedule,
   effectiveDueDate,
-  extractRecurringSection,
-  formatRecurringSection,
+  formatRecurringTransaction,
+  insertRecurringTransaction,
   materializeTransaction,
-  parseRecurringSection,
   RecurringTransaction,
-  spliceRecurringSection,
 } from './recurring';
 import type { ISettings } from './settings';
 import { formatTransaction, getTotal } from './transaction-utils';
@@ -112,33 +110,39 @@ export class LedgerModifier {
   }
 
   /**
-   * saveRecurring adds a new recurring transaction or updates an existing one
-   * (matched by id).
+   * saveRecurring writes a recurring transaction. A transaction with a `block`
+   * (an existing one being edited) is replaced in place; a new one is inserted
+   * into the recurring-transactions section.
    */
   public async saveRecurring(rt: RecurringTransaction): Promise<void> {
-    const all = await this.currentRecurring();
-    const index = all.findIndex((r) => r.id === rt.id);
-    if (index === -1) {
-      all.push(rt);
-    } else {
-      all[index] = rt;
+    const text = formatRecurringTransaction(
+      rt,
+      this.plugin.settings.currencySymbol,
+    );
+    if (rt.block) {
+      await this.replaceBlock(rt.block, text);
+      return;
     }
-    await this.writeRecurring(all);
+    const vault = this.plugin.app.vault;
+    const fileContents = await vault.read(this.ledgerFile);
+    await vault.modify(
+      this.ledgerFile,
+      insertRecurringTransaction(fileContents, text),
+    );
   }
 
-  public async deleteRecurring(id: string): Promise<void> {
-    const all = await this.currentRecurring();
-    await this.writeRecurring(all.filter((r) => r.id !== id));
+  public async deleteRecurring(rt: RecurringTransaction): Promise<void> {
+    if (rt.block) {
+      await this.removeBlock(rt.block);
+    }
   }
 
   /**
    * skipRecurring advances a recurring transaction to its next occurrence
-   * without creating a transaction.
+   * without creating a transaction, updating it in place.
    */
   public async skipRecurring(rt: RecurringTransaction): Promise<void> {
-    const all = await this.currentRecurring();
-    const advanced = advanceSchedule(rt);
-    await this.writeRecurring(all.map((r) => (r.id === rt.id ? advanced : r)));
+    await this.saveRecurring(advanceSchedule(rt));
   }
 
   /**
@@ -185,36 +189,47 @@ export class LedgerModifier {
         this.skipRecurring(rt);
       },
       () => {
-        this.deleteRecurring(rt.id);
+        this.deleteRecurring(rt);
       },
     ).open();
   }
 
   /**
-   * currentRecurring re-reads and parses the recurring transactions directly
-   * from the file so writes are always based on the latest on-disk state.
+   * replaceBlock replaces the lines of an existing block in the file with the
+   * provided text.
    */
-  private async currentRecurring(): Promise<RecurringTransaction[]> {
+  private async replaceBlock(
+    block: { firstLine: number; lastLine: number },
+    newText: string,
+  ): Promise<void> {
     const vault = this.plugin.app.vault;
     const fileContents = await vault.read(this.ledgerFile);
-    const { recurringText } = extractRecurringSection(fileContents);
-    const aliases = this.plugin.txCache?.aliases ?? new Map<string, string>();
-    return parseRecurringSection(recurringText, aliases).recurring;
+    const lines = fileContents.split('\n');
+    const newLines = [
+      ...lines.slice(0, block.firstLine),
+      ...newText.split('\n'),
+      ...lines.slice(block.lastLine + 1),
+    ].join('\n');
+    await vault.modify(this.ledgerFile, newLines);
   }
 
   /**
-   * writeRecurring rewrites the managed recurring region from the provided list
-   * of recurring transactions.
+   * removeBlock deletes the lines of an existing block from the file, including
+   * a single trailing blank line if present to avoid leaving a double blank.
    */
-  private async writeRecurring(rts: RecurringTransaction[]): Promise<void> {
+  private async removeBlock(block: {
+    firstLine: number;
+    lastLine: number;
+  }): Promise<void> {
     const vault = this.plugin.app.vault;
     const fileContents = await vault.read(this.ledgerFile);
-    const sectionText = formatRecurringSection(
-      rts,
-      this.plugin.settings.currencySymbol,
-    );
-    const newContents = spliceRecurringSection(fileContents, sectionText);
-    await vault.modify(this.ledgerFile, newContents);
+    const lines = fileContents.split('\n');
+    let length = block.lastLine - block.firstLine + 1;
+    if (lines[block.firstLine + length] === '') {
+      length++;
+    }
+    lines.splice(block.firstLine, length);
+    await vault.modify(this.ledgerFile, lines.join('\n'));
   }
 }
 

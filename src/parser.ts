@@ -1,8 +1,8 @@
 import grammar from '../grammar/ledger';
 import { Error, TxError } from './error';
 import {
-  extractRecurringSection,
-  parseRecurringSection,
+  isRecurringBlock,
+  parseRecurringBlocks,
   RecurringTransaction,
 } from './recurring';
 import { ISettings } from './settings';
@@ -203,14 +203,18 @@ export const parse = (
 ): TransactionCache => {
   console.time('ledger-file-parse');
 
-  // Recurring transactions are stored in their own managed region using Ledger
-  // periodic-transaction syntax which the grammar below does not handle. Extract
-  // them first and blank out their lines (preserving line numbers) so the rest
-  // of the file parses normally.
-  const { recurringText, blankedContents } =
-    extractRecurringSection(fileContents);
+  const allBlocks = splitIntoBlocks(fileContents);
 
-  const blocks = splitIntoBlocks(blankedContents);
+  // Recurring transactions use Ledger periodic-transaction (`~`) syntax which
+  // the grammar below does not handle. They may appear anywhere in the file (as
+  // in hledger), so split them out by detecting blocks that begin with `~` and
+  // parse them separately. Each block keeps its own line numbers, so the
+  // remaining transactions are unaffected.
+  const recurringBlocks = allBlocks.filter((block) =>
+    isRecurringBlock(block.block),
+  );
+  const blocks = allBlocks.filter((block) => !isRecurringBlock(block.block));
+
   const errors: Error[] = [];
   const results: ElementWithBlock[] = blocks
     .map((block): ElementWithBlock[] | undefined => {
@@ -271,7 +275,7 @@ export const parse = (
   const aliasMap = parseAliases(aliases);
 
   const { recurring: recurringTransactions, errors: recurringErrors } =
-    parseRecurringSection(recurringText, aliasMap);
+    parseRecurringBlocks(recurringBlocks, aliasMap);
   errors.push(...recurringErrors);
 
   const txs: EnhancedTransaction[] = rawTxs

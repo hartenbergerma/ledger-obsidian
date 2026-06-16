@@ -1,20 +1,20 @@
-import { EnhancedExpenseLine } from '../src/parser';
+import { EnhancedExpenseLine, parse } from '../src/parser';
 import {
   advanceSchedule,
   effectiveDueDate,
-  extractRecurringSection,
   firstOccurrenceOnOrAfter,
   formatPeriodExpression,
-  formatRecurringSection,
+  formatRecurringTransaction,
+  insertRecurringTransaction,
   isDue,
+  isRecurringBlock,
   isRecurringInstance,
   materializeTransaction,
   nextNominalDate,
   parsePeriodExpression,
-  parseRecurringSection,
   RecurringTransaction,
-  spliceRecurringSection,
 } from '../src/recurring';
+import { settingsWithDefaults } from '../src/settings';
 import * as moment from 'moment';
 
 window.moment = moment;
@@ -164,20 +164,38 @@ describe('materializeTransaction', () => {
   });
 });
 
-describe('serialization round-trip', () => {
-  test('formats and re-parses a recurring transaction', () => {
-    const section = formatRecurringSection([monthlyRent], '$');
-    const { hasSection, recurringText } = extractRecurringSection(section);
-    expect(hasSection).toBe(true);
-
-    const { recurring, errors } = parseRecurringSection(
-      recurringText,
-      new Map(),
+describe('isRecurringBlock', () => {
+  test('detects blocks that begin with ~', () => {
+    expect(isRecurringBlock(formatRecurringTransaction(monthlyRent, '$'))).toBe(
+      true,
     );
-    expect(errors).toEqual([]);
-    expect(recurring).toHaveLength(1);
+    expect(
+      isRecurringBlock('2025/08/22 Edeka\n  Expenses:Food    $2.79\n  Assets'),
+    ).toBe(false);
+  });
+});
 
-    const rt = recurring[0];
+describe('parsing recurring transactions from a file', () => {
+  const settings = settingsWithDefaults({});
+
+  test('parses a recurring transaction and round-trips its fields', () => {
+    const file = [
+      '# recurring transactions',
+      '',
+      formatRecurringTransaction(monthlyRent, '$'),
+      '',
+      '2026/06/01 Groceries',
+      '  Expenses:Food    $20.00',
+      '  Assets:Checking',
+    ].join('\n');
+
+    const cache = parse(file, settings);
+    expect(cache.parsingErrors).toEqual([]);
+    expect(cache.recurringTransactions).toHaveLength(1);
+    expect(cache.transactions).toHaveLength(1);
+    expect(cache.transactions[0].value.payee).toBe('Groceries');
+
+    const rt = cache.recurringTransactions[0];
     expect(rt.id).toBe('abc123');
     expect(rt.payee).toBe('Rent');
     expect(rt.comment).toBe('monthly rent #housing');
@@ -185,6 +203,7 @@ describe('serialization round-trip', () => {
     expect(rt.dayOfMonth).toBe(15);
     expect(rt.nextDate).toBe('2026-07-15');
     expect(rt.adjustToWorkday).toBe(true);
+    expect(rt.block).toBeDefined();
 
     const amounts = rt.expenselines
       .filter((l): l is EnhancedExpenseLine => 'account' in l)
@@ -192,61 +211,100 @@ describe('serialization round-trip', () => {
     expect(amounts).toEqual([1500, -1500]);
   });
 
-  test('parses a recurring transaction without a user comment', () => {
-    const rt = { ...monthlyRent, comment: undefined };
-    const section = formatRecurringSection([rt], '$');
-    const { recurringText } = extractRecurringSection(section);
-    const { recurring } = parseRecurringSection(recurringText, new Map());
-    expect(recurring[0].comment).toBeUndefined();
-    expect(recurring[0].payee).toBe('Rent');
-  });
-});
-
-describe('extract and splice', () => {
-  test('blanks out the recurring region while preserving line numbers', () => {
+  test('parses recurring transactions placed anywhere in the file', () => {
+    // The recurring transaction appears after the regular ones, with no
+    // managed section, as hledger allows.
     const file = [
-      'alias e=Expenses',
-      '',
-      formatRecurringSection([monthlyRent], '$'),
-      '',
       '2026/06/01 Groceries',
       '  Expenses:Food    $20.00',
       '  Assets:Checking',
+      '',
+      formatRecurringTransaction(monthlyRent, '$'),
     ].join('\n');
 
-    const { blankedContents } = extractRecurringSection(file);
-    const blankedLines = blankedContents.split('\n');
-    const originalLines = file.split('\n');
-    // The transaction lines keep their original positions.
-    const txLineIndex = originalLines.indexOf('2026/06/01 Groceries');
-    expect(blankedLines[txLineIndex]).toBe('2026/06/01 Groceries');
-    // The line count is unchanged.
-    expect(blankedLines.length).toBe(originalLines.length);
+    const cache = parse(file, settings);
+    expect(cache.parsingErrors).toEqual([]);
+    expect(cache.transactions).toHaveLength(1);
+    expect(cache.recurringTransactions).toHaveLength(1);
   });
 
-  test('inserts a new region before the first transaction', () => {
-    const file = ['alias e=Expenses', '', '2026/06/01 Groceries', '  x'].join(
-      '\n',
-    );
-    const section = formatRecurringSection([monthlyRent], '$');
-    const result = spliceRecurringSection(file, section);
+  test('parses a recurring transaction without a user comment', () => {
+    const rt = { ...monthlyRent, comment: undefined };
+    const file = formatRecurringTransaction(rt, '$');
+    const cache = parse(file, settings);
+    expect(cache.recurringTransactions[0].comment).toBeUndefined();
+    expect(cache.recurringTransactions[0].payee).toBe('Rent');
+  });
+});
+
+describe('insertRecurringTransaction', () => {
+  const settings = settingsWithDefaults({});
+  const rtText = formatRecurringTransaction(monthlyRent, '$');
+
+  test('creates a section before the transactions heading', () => {
+    const file = [
+      '# Transaktionen',
+      '2025/08/22 Edeka',
+      '  Expenses:Food    $2.79',
+      '  Assets:Checking',
+    ].join('\n');
+
+    const result = insertRecurringTransaction(file, rtText);
     const lines = result.split('\n');
-    const recurIndex = lines.findIndex((l) => l.startsWith('~'));
-    const txIndex = lines.findIndex((l) => l.startsWith('2026/06/01'));
-    expect(recurIndex).toBeGreaterThan(-1);
-    expect(recurIndex).toBeLessThan(txIndex);
+    const recurringHeading = lines.indexOf('# recurring transactions');
+    const txHeading = lines.indexOf('# Transaktionen');
+    expect(recurringHeading).toBeGreaterThan(-1);
+    expect(recurringHeading).toBeLessThan(txHeading);
+
+    // The result still parses cleanly with both kinds of transaction.
+    const cache = parse(result, settings);
+    expect(cache.parsingErrors).toEqual([]);
+    expect(cache.recurringTransactions).toHaveLength(1);
+    expect(cache.transactions).toHaveLength(1);
   });
 
-  test('replaces an existing region and can remove it', () => {
-    const file = ['alias e=Expenses', '', '2026/06/01 Groceries', '  x'].join(
-      '\n',
-    );
-    const withSection = spliceRecurringSection(
+  test('inserts before the first transaction when there is no heading', () => {
+    const file = [
+      '2025/08/22 Edeka',
+      '  Expenses:Food    $2.79',
+      '  Assets:Checking',
+    ].join('\n');
+
+    const result = insertRecurringTransaction(file, rtText);
+    const lines = result.split('\n');
+    const recurIdx = lines.findIndex((l) => l.startsWith('~'));
+    const txIdx = lines.findIndex((l) => l.startsWith('2025/08/22'));
+    expect(lines).toContain('# recurring transactions');
+    expect(recurIdx).toBeGreaterThan(-1);
+    expect(recurIdx).toBeLessThan(txIdx);
+  });
+
+  test('appends after an existing recurring transaction', () => {
+    const file = [
+      '# recurring transactions',
+      '',
+      formatRecurringTransaction({ ...monthlyRent, id: 'first' }, '$'),
+      '',
+      '2025/08/22 Edeka',
+      '  Expenses:Food    $2.79',
+      '  Assets:Checking',
+    ].join('\n');
+
+    const result = insertRecurringTransaction(
       file,
-      formatRecurringSection([monthlyRent], '$'),
+      formatRecurringTransaction({ ...monthlyRent, id: 'second' }, '$'),
     );
-    const removed = spliceRecurringSection(withSection, '');
-    expect(removed).not.toContain('~ every');
-    expect(removed).toContain('2026/06/01 Groceries');
+    expect((result.match(/^~ /gm) || []).length).toBe(2);
+
+    const cache = parse(result, settings);
+    expect(cache.parsingErrors).toEqual([]);
+    expect(cache.recurringTransactions).toHaveLength(2);
+    expect(cache.transactions).toHaveLength(1);
+  });
+
+  test('appends to an empty file', () => {
+    const result = insertRecurringTransaction('', rtText);
+    const cache = parse(result, settings);
+    expect(cache.recurringTransactions).toHaveLength(1);
   });
 });

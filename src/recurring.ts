@@ -6,6 +6,7 @@ import type {
   EnhancedExpenseLine,
   EnhancedTransaction,
   Expenseline,
+  FileBlock,
 } from './parser';
 import { dealiasAccount, formatExpenseLines } from './transaction-utils';
 import { Grammar, Parser } from 'nearley';
@@ -50,11 +51,21 @@ export interface RecurringTransaction {
   /** Transaction-level comment carrying the memo and tag(s), e.g. `rent #housing`. */
   comment?: string;
   expenselines: (EnhancedExpenseLine | Commentline)[];
+
+  /**
+   * block locates this recurring transaction's `~` block within the ledger file
+   * so it can be edited or removed in place. It is absent for a transaction
+   * being created in the form (which has not yet been written to the file).
+   */
+  block?: FileBlock;
 }
 
-const RECUR_BEGIN =
-  '; >>> ledger-obsidian recurring transactions (managed) >>>';
-const RECUR_END = '; <<< ledger-obsidian recurring transactions <<<';
+/**
+ * The heading written above newly created recurring transactions when the file
+ * does not already contain any. Like all `#` lines it is just a Ledger comment,
+ * so it stays compatible with the Ledger CLI and hledger.
+ */
+export const RECURRING_HEADING = '# recurring transactions';
 
 const weekdayNames = [
   'sunday',
@@ -279,25 +290,22 @@ export const formatRecurringTransaction = (
   return `${header}\n${postings}`;
 };
 
-/**
- * formatRecurringSection renders the full managed recurring-transactions region
- * (including its begin/end markers) for the provided schedules. Returns an empty
- * string when there are no recurring transactions, so the region is removed.
- */
-export const formatRecurringSection = (
-  rts: RecurringTransaction[],
-  currencySymbol: string,
-): string => {
-  if (rts.length === 0) {
-    return '';
-  }
-  const blocks = rts
-    .map((rt) => formatRecurringTransaction(rt, currencySymbol))
-    .join('\n\n');
-  return `${RECUR_BEGIN}\n${blocks}\n${RECUR_END}`;
-};
-
 // --- Parsing ---------------------------------------------------------------
+
+/**
+ * isRecurringBlock returns true when a block of text (as produced by the
+ * parser's block splitter) is a recurring transaction, i.e. its first
+ * non-empty line begins with `~`. This lets recurring transactions be placed
+ * anywhere in the file, as in hledger.
+ */
+export const isRecurringBlock = (blockText: string): boolean => {
+  for (const line of blockText.split('\n')) {
+    if (line.trim() !== '') {
+      return line.trimStart().startsWith('~');
+    }
+  }
+  return false;
+};
 
 interface ParsedMetadata {
   id?: string;
@@ -424,79 +432,27 @@ const parseRecurringBlock = (
 };
 
 /**
- * extractRecurringSection locates the managed recurring region within a ledger
- * file. It returns the raw text of the region (excluding markers) along with a
- * copy of the file in which the region's lines have been blanked out. Blanking
- * (rather than removing) preserves the line numbers of the remaining
- * transactions so they can still be edited in place.
+ * parseRecurringBlocks parses the recurring transactions from the provided
+ * blocks (those for which isRecurringBlock returned true), attaching each
+ * block's file location and collecting any parse errors.
  */
-export const extractRecurringSection = (
-  fileContents: string,
-): { hasSection: boolean; recurringText: string; blankedContents: string } => {
-  const lines = fileContents.split('\n');
-  let begin = -1;
-  let end = -1;
-  for (let i = 0; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
-    if (begin === -1 && trimmed === RECUR_BEGIN) {
-      begin = i;
-    } else if (begin !== -1 && trimmed === RECUR_END) {
-      end = i;
-      break;
-    }
-  }
-
-  if (begin === -1 || end === -1) {
-    return {
-      hasSection: false,
-      recurringText: '',
-      blankedContents: fileContents,
-    };
-  }
-
-  const recurringText = lines.slice(begin + 1, end).join('\n');
-  const blankedContents = lines
-    .map((line, i) => (i >= begin && i <= end ? '' : line))
-    .join('\n');
-  return { hasSection: true, recurringText, blankedContents };
-};
-
-/**
- * parseRecurringSection parses the recurring region text into a list of
- * recurring transactions, collecting any parse errors.
- */
-export const parseRecurringSection = (
-  recurringText: string,
+export const parseRecurringBlocks = (
+  blocks: FileBlock[],
   aliases: Map<string, string>,
 ): { recurring: RecurringTransaction[]; errors: LedgerError[] } => {
   const recurring: RecurringTransaction[] = [];
   const errors: LedgerError[] = [];
 
-  // Group lines into blocks, each starting with a `~` line.
-  const blocks: string[][] = [];
-  recurringText.split('\n').forEach((line) => {
-    if (line.trim() === '') {
-      return;
-    }
-    if (line.trimStart().startsWith('~')) {
-      blocks.push([line]);
-    } else if (blocks.length > 0) {
-      blocks[blocks.length - 1].push(line);
-    }
-  });
-
-  blocks.forEach((blockLines) => {
+  blocks.forEach((block) => {
     try {
-      recurring.push(parseRecurringBlock(blockLines, aliases));
+      const rt = parseRecurringBlock(block.block.split('\n'), aliases);
+      rt.block = block;
+      recurring.push(rt);
     } catch (error) {
       errors.push({
         message: 'Failed to parse recurring transaction',
         error,
-        block: {
-          block: blockLines.join('\n'),
-          firstLine: -1,
-          lastLine: -1,
-        },
+        block,
       });
     }
   });
@@ -504,54 +460,86 @@ export const parseRecurringSection = (
   return { recurring, errors };
 };
 
+const isHeading = (line: string): boolean => line.trimStart().startsWith('#');
+
+const isDatedTransaction = (line: string): boolean =>
+  /^\d{4}[-/]\d{2}[-/]\d{2}/.test(line);
+
 /**
- * spliceRecurringSection returns a copy of the file contents with the managed
- * recurring region replaced by `sectionText` (which should already include its
- * markers, or be empty to remove the region). When the file has no region yet,
- * the section is inserted before the first dated transaction, keeping it above
- * the transactions.
+ * lastRecurringBlockEnd returns the index of the last line belonging to the
+ * final recurring (`~`) block in the file, or -1 when there are none. Blocks
+ * are delimited by blank lines, matching the parser's block splitter.
  */
-export const spliceRecurringSection = (
+const lastRecurringBlockEnd = (lines: string[]): number => {
+  let end = -1;
+  let i = 0;
+  while (i < lines.length) {
+    if (lines[i].trim() === '') {
+      i++;
+      continue;
+    }
+    let j = i;
+    while (j < lines.length && lines[j].trim() !== '') {
+      j++;
+    }
+    if (lines[i].trimStart().startsWith('~')) {
+      end = j - 1;
+    }
+    i = j;
+  }
+  return end;
+};
+
+const spliceLines = (
+  lines: string[],
+  index: number,
+  insert: string[],
+): string =>
+  [...lines.slice(0, index), ...insert, ...lines.slice(index)].join('\n');
+
+/**
+ * insertRecurringTransaction returns a copy of the file with the rendered
+ * recurring transaction inserted. Placement, in order of preference:
+ *
+ *  1. After the last existing recurring transaction, keeping them together.
+ *  2. After an existing recurring-transactions heading.
+ *  3. In a new `# recurring transactions` section placed immediately before the
+ *     transactions section (the heading above the first transaction), or before
+ *     the first transaction when there is no such heading.
+ *  4. At the end of the file when there are no transactions at all.
+ *
+ * This works whether or not the file uses `#` section headings.
+ */
+export const insertRecurringTransaction = (
   fileContents: string,
-  sectionText: string,
+  rtText: string,
 ): string => {
   const lines = fileContents.split('\n');
-  let begin = -1;
-  let end = -1;
-  for (let i = 0; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
-    if (begin === -1 && trimmed === RECUR_BEGIN) {
-      begin = i;
-    } else if (begin !== -1 && trimmed === RECUR_END) {
-      end = i;
-      break;
-    }
+
+  const lastEnd = lastRecurringBlockEnd(lines);
+  if (lastEnd !== -1) {
+    return spliceLines(lines, lastEnd + 1, ['', rtText]);
   }
 
-  if (begin !== -1 && end !== -1) {
-    // Replace the existing region. When the new section is empty, also drop a
-    // trailing blank line to avoid accumulating blank lines.
-    let removeEnd = end;
-    if (sectionText === '' && lines[end + 1] === '') {
-      removeEnd = end + 1;
-    }
-    const before = lines.slice(0, begin);
-    const after = lines.slice(removeEnd + 1);
-    const middle = sectionText === '' ? [] : sectionText.split('\n');
-    return [...before, ...middle, ...after].join('\n');
-  }
-
-  if (sectionText === '') {
-    return fileContents;
-  }
-
-  // No region yet: insert before the first dated transaction.
-  const firstTxIndex = lines.findIndex((line) =>
-    /^\d{4}[-/]\d{2}[-/]\d{2}/.test(line),
+  const headingIdx = lines.findIndex(
+    (line) => isHeading(line) && /recurring/i.test(line),
   );
-  const insertAt = firstTxIndex === -1 ? lines.length : firstTxIndex;
-  const block = [...sectionText.split('\n'), ''];
-  return [...lines.slice(0, insertAt), ...block, ...lines.slice(insertAt)].join(
-    '\n',
-  );
+  if (headingIdx !== -1) {
+    return spliceLines(lines, headingIdx + 1, ['', rtText]);
+  }
+
+  const firstTxIdx = lines.findIndex((line) => isDatedTransaction(line));
+  if (firstTxIdx === -1) {
+    // No transactions yet: append a new section at the end of the file.
+    const prefix = fileContents.trim() === '' ? [] : [''];
+    return [...lines, ...prefix, RECURRING_HEADING, '', rtText].join('\n');
+  }
+
+  // Insert before the heading that introduces the transactions, if present.
+  let i = firstTxIdx - 1;
+  while (i >= 0 && lines[i].trim() === '') {
+    i--;
+  }
+  const insertAt = i >= 0 && isHeading(lines[i]) ? i : firstTxIdx;
+  return spliceLines(lines, insertAt, [RECURRING_HEADING, '', rtText, '']);
 };
