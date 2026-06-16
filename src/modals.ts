@@ -153,8 +153,14 @@ export class RecurringAcceptModal extends Modal {
     const dateSetting = this.contentEl.createDiv({
       cls: 'ledger-recurring-accept-date',
     });
-    dateSetting.createEl('label', { text: 'Date' });
+    dateSetting.style.display = 'flex';
+    dateSetting.style.alignItems = 'center';
+    dateSetting.style.gap = '10px';
+    dateSetting.style.margin = '12px 0';
+    const dateLabel = dateSetting.createEl('label', { text: 'Date' });
+    dateLabel.style.flexShrink = '0';
     const dateInput = dateSetting.createEl('input', { type: 'date' });
+    dateInput.style.flex = '1';
     dateInput.value = this.defaultDate;
 
     const buttonContainer = this.contentEl.createDiv({

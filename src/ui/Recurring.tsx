@@ -140,28 +140,25 @@ const RecurringPillStyle = styled.span`
 `;
 
 /**
- * InfoIcon renders a small circled "i" whose tooltip (title) explains a
- * control. Used where a label is kept short for layout reasons.
+ * InfoIcon renders a small circled "i" glyph.
  */
-export const InfoIcon: React.FC<{ title: string }> = ({
-  title,
+export const InfoIcon: React.FC<{ size?: number }> = ({
+  size = 13,
 }): JSX.Element => (
-  <span className="ledger-info-icon" title={title} aria-label={title}>
-    <svg
-      width="13"
-      height="13"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="12" cy="12" r="10" />
-      <line x1="12" y1="16" x2="12" y2="12" />
-      <line x1="12" y1="8" x2="12.01" y2="8" />
-    </svg>
-  </span>
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <circle cx="12" cy="12" r="10" />
+    <line x1="12" y1="16" x2="12" y2="12" />
+    <line x1="12" y1="8" x2="12.01" y2="8" />
+  </svg>
 );
 
 /**
@@ -257,24 +254,49 @@ const RecurringSelectStyle = styled.div`
     width: 4em;
   }
 
-  .ledger-recurring-checkbox {
-    display: flex;
+  .ledger-recurring-workday {
+    display: inline-flex;
     align-items: center;
     gap: 6px;
+    align-self: flex-start;
     font-size: 0.9em;
+  }
+
+  .ledger-recurring-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     white-space: nowrap;
   }
 
   .ledger-recurring-checkbox input[type='checkbox'] {
     margin: 0;
     flex-shrink: 0;
+    width: auto;
   }
 
   .ledger-info-icon {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
+    padding: 0;
+    margin: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
     color: var(--text-muted);
-    cursor: help;
+    cursor: pointer;
+  }
+
+  .ledger-info-icon:hover {
+    color: var(--text-normal);
+  }
+
+  .ledger-recurring-help {
+    align-self: flex-start;
+    max-width: 260px;
+    font-size: 0.8em;
+    color: var(--text-muted);
   }
 
   .ledger-recurring-panel-buttons {
@@ -296,6 +318,7 @@ export const RecurringSelect: React.FC<{
   onChange: (value: RecurringFormValue) => void;
 }> = ({ value, onChange }): JSX.Element => {
   const [open, setOpen] = React.useState(false);
+  const [showHelp, setShowHelp] = React.useState(false);
   // Local draft so edits in the panel only take effect when confirmed.
   const [draft, setDraft] = React.useState<RecurringFormValue>(value);
 
@@ -404,21 +427,31 @@ export const RecurringSelect: React.FC<{
           </div>
         )}
 
-        <label className="ledger-recurring-checkbox">
-          <input
-            type="checkbox"
-            checked={draft.adjustToWorkday}
-            onChange={(e) => update({ adjustToWorkday: e.target.checked })}
-          />
-          Workdays only
-          <InfoIcon
-            title={
-              'If an occurrence falls on a weekend or public holiday, move it ' +
-              'to the next working day. Choose your country under the plugin ' +
-              'settings (Holiday Country).'
-            }
-          />
-        </label>
+        <div className="ledger-recurring-workday">
+          <label className="ledger-recurring-checkbox">
+            <input
+              type="checkbox"
+              checked={draft.adjustToWorkday}
+              onChange={(e) => update({ adjustToWorkday: e.target.checked })}
+            />
+            Workdays only
+          </label>
+          <button
+            type="button"
+            className="ledger-info-icon"
+            aria-label="What does “Workdays only” mean?"
+            onClick={() => setShowHelp((s) => !s)}
+          >
+            <InfoIcon />
+          </button>
+        </div>
+        {showHelp ? (
+          <div className="ledger-recurring-help">
+            If an occurrence falls on a weekend or public holiday, it is moved
+            to the next working day. Choose your country under the plugin
+            settings (Holiday Country).
+          </div>
+        ) : null}
 
         <div className="ledger-recurring-panel-buttons">
           <button

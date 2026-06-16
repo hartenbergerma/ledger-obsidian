@@ -246,7 +246,7 @@ describe('insertRecurringTransaction', () => {
   const settings = settingsWithDefaults({});
   const rtText = formatRecurringTransaction(monthlyRent, '$');
 
-  test('creates a section before the transactions heading', () => {
+  test('places the recurring transaction above the transactions heading', () => {
     const file = [
       '# Transaktionen',
       '2025/08/22 Edeka',
@@ -256,10 +256,12 @@ describe('insertRecurringTransaction', () => {
 
     const result = insertRecurringTransaction(file, rtText);
     const lines = result.split('\n');
-    const recurringHeading = lines.indexOf('# recurring transactions');
+    // No heading is added; the ~ block sits above the transactions heading.
+    expect(lines).not.toContain('# recurring transactions');
+    const recurIdx = lines.findIndex((l) => l.startsWith('~'));
     const txHeading = lines.indexOf('# Transaktionen');
-    expect(recurringHeading).toBeGreaterThan(-1);
-    expect(recurringHeading).toBeLessThan(txHeading);
+    expect(recurIdx).toBeGreaterThan(-1);
+    expect(recurIdx).toBeLessThan(txHeading);
 
     // The result still parses cleanly with both kinds of transaction.
     const cache = parse(result, settings);
@@ -279,7 +281,7 @@ describe('insertRecurringTransaction', () => {
     const lines = result.split('\n');
     const recurIdx = lines.findIndex((l) => l.startsWith('~'));
     const txIdx = lines.findIndex((l) => l.startsWith('2025/08/22'));
-    expect(lines).toContain('# recurring transactions');
+    expect(lines).not.toContain('# recurring transactions');
     expect(recurIdx).toBeGreaterThan(-1);
     expect(recurIdx).toBeLessThan(txIdx);
   });

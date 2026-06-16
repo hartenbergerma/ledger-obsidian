@@ -246,14 +246,18 @@ export const TagSelect: React.FC<{
   }
 
   const normalizedQuery = sanitizeTag(query);
-  const suggestions = allTags.filter(
+  // The internal recurring marker tags are not offered as selectable tags.
+  const selectableTags = allTags.filter((t) => !isRecurringTag(t));
+  const suggestions = selectableTags.filter(
     (t) =>
       normalizedQuery === '' ||
       t.toLowerCase().includes(normalizedQuery.toLowerCase()),
   );
   const canCreate =
     normalizedQuery !== '' &&
-    !allTags.some((t) => t.toLowerCase() === normalizedQuery.toLowerCase());
+    !selectableTags.some(
+      (t) => t.toLowerCase() === normalizedQuery.toLowerCase(),
+    );
 
   if (!open) {
     return (
@@ -321,7 +325,7 @@ export const TagSelect: React.FC<{
           ) : null}
           {suggestions.length === 0 && !canCreate ? (
             <div className="ledger-tag-empty">
-              {allTags.length === 0
+              {selectableTags.length === 0
                 ? 'No tags yet — type to create one'
                 : 'No matching tags'}
             </div>

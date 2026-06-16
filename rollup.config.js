@@ -12,14 +12,18 @@ export default {
   input: 'src/main.ts',
   output: {
     dir: '.',
-    sourcemap: 'inline',
+    // Inline source maps are useful while developing, but they roughly double
+    // the size of the shipped main.js, so omit them from production builds.
+    sourcemap: isProd ? false : 'inline',
     sourcemapExcludeSources: isProd,
     format: 'cjs',
     exports: 'default',
   },
   external: ['obsidian', 'fs', 'os', 'path'],
   plugins: [
-    typescript(),
+    // Match the TypeScript plugin's source map output to the rollup output
+    // setting above to avoid a warning (and unused work) in production builds.
+    typescript({ sourceMap: !isProd, inlineSources: !isProd }),
     json(),
     resolve({
       browser: true,

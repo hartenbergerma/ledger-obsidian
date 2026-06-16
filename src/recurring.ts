@@ -67,13 +67,6 @@ export interface RecurringTransaction {
   block?: FileBlock;
 }
 
-/**
- * The heading written above newly created recurring transactions when the file
- * does not already contain any. Like all `#` lines it is just a Ledger comment,
- * so it stays compatible with the Ledger CLI and hledger.
- */
-export const RECURRING_HEADING = '# recurring transactions';
-
 const weekdayNames = [
   'sunday',
   'monday',
@@ -487,16 +480,18 @@ const spliceLines = (
 
 /**
  * insertRecurringTransaction returns a copy of the file with the rendered
- * recurring transaction inserted. Placement, in order of preference:
+ * recurring transaction inserted above the regular transactions. Placement, in
+ * order of preference:
  *
  *  1. After the last existing recurring transaction, keeping them together.
- *  2. After an existing recurring-transactions heading.
- *  3. In a new `# recurring transactions` section placed immediately before the
- *     transactions section (the heading above the first transaction), or before
- *     the first transaction when there is no such heading.
+ *  2. Immediately before the heading that introduces the transactions (the `#`
+ *     comment above the first transaction), if there is one.
+ *  3. Immediately before the first transaction.
  *  4. At the end of the file when there are no transactions at all.
  *
- * This works whether or not the file uses `#` section headings.
+ * No heading is added for the recurring transactions; they are just placed above
+ * the regular ones. This works whether or not the file uses `#` section
+ * headings.
  */
 export const insertRecurringTransaction = (
   fileContents: string,
@@ -509,25 +504,19 @@ export const insertRecurringTransaction = (
     return spliceLines(lines, lastEnd + 1, ['', rtText]);
   }
 
-  const headingIdx = lines.findIndex(
-    (line) => isHeading(line) && /recurring/i.test(line),
-  );
-  if (headingIdx !== -1) {
-    return spliceLines(lines, headingIdx + 1, ['', rtText]);
-  }
-
   const firstTxIdx = lines.findIndex((line) => isDatedTransaction(line));
   if (firstTxIdx === -1) {
-    // No transactions yet: append a new section at the end of the file.
+    // No transactions yet: append at the end of the file.
     const prefix = fileContents.trim() === '' ? [] : [''];
-    return [...lines, ...prefix, RECURRING_HEADING, '', rtText].join('\n');
+    return [...lines, ...prefix, rtText].join('\n');
   }
 
-  // Insert before the heading that introduces the transactions, if present.
+  // Insert before the heading that introduces the transactions, if present,
+  // otherwise directly before the first transaction.
   let i = firstTxIdx - 1;
   while (i >= 0 && lines[i].trim() === '') {
     i--;
   }
   const insertAt = i >= 0 && isHeading(lines[i]) ? i : firstTxIdx;
-  return spliceLines(lines, insertAt, [RECURRING_HEADING, '', rtText, '']);
+  return spliceLines(lines, insertAt, [rtText, '']);
 };
