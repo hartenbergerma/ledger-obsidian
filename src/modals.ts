@@ -61,93 +61,38 @@ export class ConfirmModal extends Modal {
 }
 
 /**
- * RecurringRemoveModal asks the user whether they want to skip just the next
- * occurrence of a recurring transaction or delete the schedule entirely.
- */
-export class RecurringRemoveModal extends Modal {
-  private readonly recurring: RecurringTransaction;
-  private readonly onSkip: () => void;
-  private readonly onDelete: () => void;
-
-  constructor(
-    app: App,
-    recurring: RecurringTransaction,
-    onSkip: () => void,
-    onDelete: () => void,
-  ) {
-    super(app);
-    this.recurring = recurring;
-    this.onSkip = onSkip;
-    this.onDelete = onDelete;
-  }
-
-  public onOpen = (): void => {
-    this.titleEl.setText('Remove recurring transaction');
-    this.contentEl.createEl('p', {
-      text:
-        'What would you like to do with the recurring transaction ' +
-        `"${this.recurring.payee}"?`,
-    });
-
-    const buttonContainer = this.contentEl.createDiv({
-      cls: 'modal-button-container',
-    });
-
-    const cancelButton = buttonContainer.createEl('button', { text: 'Cancel' });
-    cancelButton.addEventListener('click', () => this.close());
-
-    const skipButton = buttonContainer.createEl('button', {
-      text: 'Skip this occurrence',
-    });
-    skipButton.addEventListener('click', () => {
-      this.onSkip();
-      this.close();
-    });
-
-    const deleteButton = buttonContainer.createEl('button', {
-      text: 'Delete schedule',
-      cls: 'mod-warning',
-    });
-    deleteButton.addEventListener('click', () => {
-      this.onDelete();
-      this.close();
-    });
-  };
-
-  public onClose = (): void => {
-    this.contentEl.empty();
-  };
-}
-
-/**
- * RecurringAcceptModal confirms adding an occurrence of a recurring transaction
- * and lets the user adjust the date of the transaction that will be written.
- * The schedule itself is unaffected by the chosen date.
+ * RecurringAcceptModal lets the user add an occurrence of a recurring
+ * transaction (adjusting its date) or skip the occurrence. In both cases the
+ * schedule advances to its next regular occurrence; the chosen date only affects
+ * the transaction that is written when adding.
  */
 export class RecurringAcceptModal extends Modal {
   private readonly payee: string;
   private readonly total: string;
   private readonly defaultDate: string;
-  private readonly onConfirm: (dateISO: string) => void;
+  private readonly onAdd: (dateISO: string) => void;
+  private readonly onSkip: () => void;
 
   constructor(
     app: App,
     payee: string,
     total: string,
     defaultDate: string,
-    onConfirm: (dateISO: string) => void,
+    onAdd: (dateISO: string) => void,
+    onSkip: () => void,
   ) {
     super(app);
     this.payee = payee;
     this.total = total;
     this.defaultDate = defaultDate;
-    this.onConfirm = onConfirm;
+    this.onAdd = onAdd;
+    this.onSkip = onSkip;
   }
 
   public onOpen = (): void => {
-    this.titleEl.setText('Add recurring transaction');
+    this.titleEl.setText('Add or skip recurring transaction');
     this.contentEl.createEl('p', {
-      text: `Add "${this.payee}" for ${this.total} to your ledger.`,
+      text: `Add "${this.payee}" for ${this.total} to your ledger, or skip this occurrence.`,
     });
 
     const dateSetting = this.contentEl.createDiv({
@@ -160,7 +105,9 @@ export class RecurringAcceptModal extends Modal {
     const dateLabel = dateSetting.createEl('label', { text: 'Date' });
     dateLabel.style.flexShrink = '0';
     const dateInput = dateSetting.createEl('input', { type: 'date' });
-    dateInput.style.flex = '1';
+    // Keep the date field only as wide as the date itself needs.
+    dateInput.style.flex = '0 0 auto';
+    dateInput.style.width = 'auto';
     dateInput.value = this.defaultDate;
 
     const buttonContainer = this.contentEl.createDiv({
@@ -169,12 +116,18 @@ export class RecurringAcceptModal extends Modal {
     const cancelButton = buttonContainer.createEl('button', { text: 'Cancel' });
     cancelButton.addEventListener('click', () => this.close());
 
-    const confirmButton = buttonContainer.createEl('button', {
+    const skipButton = buttonContainer.createEl('button', { text: 'Skip' });
+    skipButton.addEventListener('click', () => {
+      this.onSkip();
+      this.close();
+    });
+
+    const addButton = buttonContainer.createEl('button', {
       text: 'Add',
       cls: 'mod-cta',
     });
-    confirmButton.addEventListener('click', () => {
-      this.onConfirm(dateInput.value || this.defaultDate);
+    addButton.addEventListener('click', () => {
+      this.onAdd(dateInput.value || this.defaultDate);
       this.close();
     });
   };

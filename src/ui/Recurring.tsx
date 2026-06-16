@@ -235,7 +235,7 @@ const RecurringSelectStyle = styled.div`
     display: flex;
     flex-direction: column;
     gap: 8px;
-    width: 280px;
+    width: 320px;
     max-width: 100%;
     padding: 10px;
     background: var(--background-primary);
@@ -251,7 +251,14 @@ const RecurringSelectStyle = styled.div`
   }
 
   .ledger-recurring-row input[type='number'] {
-    width: 4em;
+    width: 3.5em;
+    flex: 0 0 auto;
+  }
+
+  /* Keep the unit / weekday selects only as wide as their widest option. */
+  .ledger-recurring-row select {
+    width: auto;
+    flex: 0 0 auto;
   }
 
   .ledger-recurring-workday {
@@ -272,7 +279,9 @@ const RecurringSelectStyle = styled.div`
   .ledger-recurring-checkbox input[type='checkbox'] {
     margin: 0;
     flex-shrink: 0;
-    width: auto;
+    /* Override the form's width:100% rule so the checkbox stays square. */
+    width: 16px;
+    height: 16px;
   }
 
   .ledger-info-icon {

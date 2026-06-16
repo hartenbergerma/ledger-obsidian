@@ -80,7 +80,7 @@ const TransactionActions: React.FC<{
   tx: EnhancedTransaction;
   updater: LedgerModifier;
 }> = ({ tx, updater }): JSX.Element => (
-  <>
+  <span className="ledger-row-actions">
     <button
       className="ledger-row-action"
       aria-label="Edit transaction"
@@ -99,7 +99,7 @@ const TransactionActions: React.FC<{
     >
       <DeleteIcon />
     </button>
-  </>
+  </span>
 );
 
 const MobileTxListStyle = styled.div`
@@ -146,23 +146,6 @@ const MobileTxListStyle = styled.div`
   .mobile-tx-actions {
     flex-shrink: 0;
     white-space: nowrap;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .ledger-row-action {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 4px 6px;
-    cursor: pointer;
-  }
-
-  .ledger-row-action svg {
-    display: block;
-    fill: var(--text-muted);
-    stroke: none;
   }
 
   .mobile-tx-more {
@@ -348,28 +331,10 @@ const TableStyles = styled.div`
     }
   }
 
-  /* The edit/delete action buttons live in the last column. They are always
-   * visible (matching the recurring transactions table) and aligned in a row. */
+  /* The edit/delete action buttons live in the last column. Their appearance is
+   * shared with the recurring transactions list via global styles. */
   td:last-child {
     white-space: nowrap;
-  }
-
-  .ledger-row-action {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 4px 6px;
-    cursor: pointer;
-  }
-
-  .ledger-row-action svg {
-    display: block;
-    fill: var(--text-muted);
-    stroke: none;
-  }
-
-  .ledger-row-action:hover svg {
-    fill: var(--text-normal);
   }
 
   .ledger-tx-more {

@@ -4,7 +4,6 @@ import {
   ConfirmModal,
   Operation,
   RecurringAcceptModal,
-  RecurringRemoveModal,
 } from './modals';
 import { EnhancedTransaction, parse, TransactionCache } from './parser';
 import {
@@ -186,8 +185,8 @@ export class LedgerModifier {
   }
 
   /**
-   * promptAcceptRecurring confirms before adding an occurrence of a recurring
-   * transaction, letting the user adjust the transaction date.
+   * promptAcceptRecurring opens a dialog to add (with an adjustable date) or
+   * skip an occurrence of a recurring transaction.
    */
   public promptAcceptRecurring(rt: RecurringTransaction): void {
     const dueDate = effectiveDueDate(rt, this.plugin.settings.holidayCountry);
@@ -203,20 +202,21 @@ export class LedgerModifier {
       (dateISO: string) => {
         this.acceptRecurring(rt, dateISO);
       },
+      () => {
+        this.skipRecurring(rt);
+      },
     ).open();
   }
 
   /**
-   * promptRemoveRecurring asks whether to skip the next occurrence or delete the
-   * whole schedule.
+   * promptDeleteRecurring confirms before deleting a recurring schedule.
    */
-  public promptRemoveRecurring(rt: RecurringTransaction): void {
-    new RecurringRemoveModal(
+  public promptDeleteRecurring(rt: RecurringTransaction): void {
+    new ConfirmModal(
       this.plugin.app,
-      rt,
-      () => {
-        this.skipRecurring(rt);
-      },
+      'Delete recurring transaction',
+      `Are you sure you want to delete the recurring transaction "${rt.payee}"? This cannot be undone.`,
+      'Delete',
       () => {
         this.deleteRecurring(rt);
       },
