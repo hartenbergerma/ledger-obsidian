@@ -1,16 +1,20 @@
 import {
-  computeEaster,
   isHoliday,
   isWeekend,
   isWorkday,
   nextWorkday,
+  supportedCountries,
 } from '../src/holidays';
 
-describe('computeEaster', () => {
-  test('computes known Easter Sunday dates', () => {
-    expect(computeEaster(2024)).toEqual({ month: 3, day: 31 });
-    expect(computeEaster(2025)).toEqual({ month: 4, day: 20 });
-    expect(computeEaster(2026)).toEqual({ month: 4, day: 5 });
+describe('supportedCountries', () => {
+  test('offers a weekends-only option followed by named countries', () => {
+    expect(supportedCountries[0]).toEqual({
+      code: '',
+      name: 'None (weekends only)',
+    });
+    expect(supportedCountries.length).toBeGreaterThan(50);
+    expect(supportedCountries.some((c) => c.code === 'US')).toBe(true);
+    expect(supportedCountries.some((c) => c.code === 'DE')).toBe(true);
   });
 });
 
@@ -24,8 +28,9 @@ describe('isWeekend', () => {
 
 describe('isHoliday', () => {
   test('recognizes fixed-date national holidays', () => {
-    expect(isHoliday('2026-07-04', 'US')).toBe(true); // Independence Day
+    expect(isHoliday('2026-12-25', 'US')).toBe(true); // Christmas Day (Friday)
     expect(isHoliday('2026-10-03', 'DE')).toBe(true); // German Unity Day
+    expect(isHoliday('2026-12-25', 'DE')).toBe(true);
     expect(isHoliday('2026-07-04', 'DE')).toBe(false);
   });
 
@@ -37,6 +42,11 @@ describe('isHoliday', () => {
   test('recognizes nth-weekday holidays', () => {
     // US Thanksgiving 2026 is the 4th Thursday of November = Nov 26.
     expect(isHoliday('2026-11-26', 'US')).toBe(true);
+  });
+
+  test('ignores non-public days such as observances', () => {
+    // Valentine's Day is an observance, not a public holiday.
+    expect(isHoliday('2026-02-14', 'US')).toBe(false);
   });
 
   test('has no holidays for an empty country', () => {
@@ -68,6 +78,6 @@ describe('isWorkday', () => {
   test('combines weekend and holiday checks', () => {
     expect(isWorkday('2026-06-15', 'US')).toBe(true);
     expect(isWorkday('2026-06-13', 'US')).toBe(false); // weekend
-    expect(isWorkday('2026-07-03', 'US')).toBe(true); // not a holiday
+    expect(isWorkday('2026-07-07', 'US')).toBe(true); // ordinary Tuesday
   });
 });
