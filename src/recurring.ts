@@ -8,7 +8,14 @@ import type {
   Expenseline,
   FileBlock,
 } from './parser';
-import { dealiasAccount, formatExpenseLines } from './transaction-utils';
+import {
+  dealiasAccount,
+  formatComment,
+  formatExpenseLines,
+  getMemoFromComment,
+  getTagsFromComment,
+  recurringTagFor,
+} from './transaction-utils';
 import { Grammar, Parser } from 'nearley';
 
 /**
@@ -215,55 +222,36 @@ export const advanceSchedule = (
 ): RecurringTransaction => ({ ...rt, nextDate: nextNominalDate(rt) });
 
 /**
- * materializeTransaction builds the concrete transaction for the current due
- * occurrence of a recurring transaction. The resulting transaction carries a
- * `recur:<id>` marker comment line so it can be recognized in the transaction
- * list.
+ * materializeTransaction builds the concrete transaction for an occurrence of a
+ * recurring transaction on the provided date (YYYY-MM-DD). The resulting
+ * transaction carries a `#recurring-<id>` tag alongside the schedule's own tags
+ * so it can be recognized and filtered in the transaction list.
  */
 export const materializeTransaction = (
   rt: RecurringTransaction,
-  countryCode: string,
+  dateISO: string,
 ): EnhancedTransaction => {
-  const dueDate = effectiveDueDate(rt, countryCode);
-  const marker: Commentline = { comment: `recur:${rt.id}` };
+  const tags = getTagsFromComment(rt.comment);
+  const memo = getMemoFromComment(rt.comment);
+  const tag = recurringTagFor(rt.id);
+  const allTags = tags.includes(tag) ? tags : [...tags, tag];
   return {
     type: 'tx',
     blockLine: -1,
     block: { firstLine: -1, lastLine: -1, block: '' },
     value: {
       // Store the date using the same slash format the form writes.
-      date: dueDate.replace(/-/g, '/'),
+      date: dateISO.replace(/-/g, '/'),
       payee: rt.payee,
-      comment: rt.comment,
-      expenselines: [marker, ...rt.expenselines],
+      comment: formatComment(memo, allTags),
+      expenselines: rt.expenselines,
     },
   };
 };
 
-/**
- * isRecurringInstance returns true when the transaction was generated from a
- * recurring schedule (it contains a `recur:<id>` marker comment line).
- */
-export const isRecurringInstance = (tx: EnhancedTransaction): boolean =>
-  recurringInstanceId(tx) !== undefined;
-
-/**
- * recurringInstanceId returns the recurring schedule id a transaction was
- * generated from, or undefined when it is not a recurring instance.
- */
-export const recurringInstanceId = (
-  tx: EnhancedTransaction,
-): string | undefined => {
-  for (const line of tx.value.expenselines) {
-    if (!('account' in line) && line.comment) {
-      const match = /^recur:(\S+)/.exec(line.comment.trim());
-      if (match) {
-        return match[1];
-      }
-    }
-  }
-  return undefined;
-};
+// Recognizing recurring instances is shared with the rest of the app via
+// transaction-utils so it stays in the tag stream.
+export { isRecurringInstance, recurringInstanceId } from './transaction-utils';
 
 // --- Serialization ---------------------------------------------------------
 

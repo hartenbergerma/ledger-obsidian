@@ -119,6 +119,65 @@ export class RecurringRemoveModal extends Modal {
   };
 }
 
+/**
+ * RecurringAcceptModal confirms adding an occurrence of a recurring transaction
+ * and lets the user adjust the date of the transaction that will be written.
+ * The schedule itself is unaffected by the chosen date.
+ */
+export class RecurringAcceptModal extends Modal {
+  private readonly payee: string;
+  private readonly total: string;
+  private readonly defaultDate: string;
+  private readonly onConfirm: (dateISO: string) => void;
+
+  constructor(
+    app: App,
+    payee: string,
+    total: string,
+    defaultDate: string,
+    onConfirm: (dateISO: string) => void,
+  ) {
+    super(app);
+    this.payee = payee;
+    this.total = total;
+    this.defaultDate = defaultDate;
+    this.onConfirm = onConfirm;
+  }
+
+  public onOpen = (): void => {
+    this.titleEl.setText('Add recurring transaction');
+    this.contentEl.createEl('p', {
+      text: `Add "${this.payee}" for ${this.total} to your ledger.`,
+    });
+
+    const dateSetting = this.contentEl.createDiv({
+      cls: 'ledger-recurring-accept-date',
+    });
+    dateSetting.createEl('label', { text: 'Date' });
+    const dateInput = dateSetting.createEl('input', { type: 'date' });
+    dateInput.value = this.defaultDate;
+
+    const buttonContainer = this.contentEl.createDiv({
+      cls: 'modal-button-container',
+    });
+    const cancelButton = buttonContainer.createEl('button', { text: 'Cancel' });
+    cancelButton.addEventListener('click', () => this.close());
+
+    const confirmButton = buttonContainer.createEl('button', {
+      text: 'Add',
+      cls: 'mod-cta',
+    });
+    confirmButton.addEventListener('click', () => {
+      this.onConfirm(dateInput.value || this.defaultDate);
+      this.close();
+    });
+  };
+
+  public onClose = (): void => {
+    this.contentEl.empty();
+  };
+}
+
 export class AddExpenseModal extends Modal {
   private readonly plugin: LedgerPlugin;
   private readonly updater: LedgerModifier;

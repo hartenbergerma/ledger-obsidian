@@ -230,6 +230,55 @@ export const getTransactionTags = (tx: EnhancedTransaction): string[] =>
   getTagsFromComment(tx.value.comment);
 
 /**
+ * Recurring transactions generated from a schedule are marked with a tag of the
+ * form `recurring-<scheduleId>` stored alongside the transaction's other tags
+ * (e.g. `lunch #work #recurring-ab12cd`). Keeping the marker in the normal tag
+ * stream — rather than a separate comment — lets it round-trip with the memo and
+ * other tags while remaining recognizable.
+ */
+export const RECURRING_TAG_PREFIX = 'recurring-';
+
+export const recurringTagFor = (scheduleId: string): string =>
+  `${RECURRING_TAG_PREFIX}${scheduleId}`;
+
+export const isRecurringTag = (tag: string): boolean =>
+  tag === 'recurring' || tag.startsWith(RECURRING_TAG_PREFIX);
+
+/**
+ * RECURRING_TAG_FILTER is the sentinel "selected tag" value used to filter the
+ * transaction list down to recurring instances. The leading space means it can
+ * never collide with a real tag, which is a whitespace-delimited token.
+ */
+export const RECURRING_TAG_FILTER = ' recurring';
+
+/**
+ * getVisibleTransactionTags returns a transaction's tags excluding the internal
+ * recurring marker tag, for display next to the payee.
+ */
+export const getVisibleTransactionTags = (tx: EnhancedTransaction): string[] =>
+  getTransactionTags(tx).filter((tag) => !isRecurringTag(tag));
+
+/**
+ * isRecurringInstance returns true when a transaction was generated from a
+ * recurring schedule (it carries a recurring marker tag).
+ */
+export const isRecurringInstance = (tx: EnhancedTransaction): boolean =>
+  getTransactionTags(tx).some(isRecurringTag);
+
+/**
+ * recurringInstanceId returns the schedule id a transaction was generated from,
+ * or undefined when it is not a recurring instance.
+ */
+export const recurringInstanceId = (
+  tx: EnhancedTransaction,
+): string | undefined => {
+  const tag = getTransactionTags(tx).find(isRecurringTag);
+  return tag && tag.startsWith(RECURRING_TAG_PREFIX)
+    ? tag.slice(RECURRING_TAG_PREFIX.length)
+    : undefined;
+};
+
+/**
  * getTransactionTag returns the single (first) tag applied to a transaction, or
  * an empty string when it has none.
  */

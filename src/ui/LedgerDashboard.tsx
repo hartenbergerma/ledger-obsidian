@@ -6,6 +6,7 @@ import { DateRange, Interval, resolveDateRange } from '../date-utils';
 import { LedgerModifier } from '../file-interface';
 import type { TransactionCache } from '../parser';
 import { ISettings } from '../settings';
+import { isRecurringTag, RECURRING_TAG_FILTER } from '../transaction-utils';
 import { AccountsList } from './AccountsList';
 import { AccountVisualization } from './AccountVisualization';
 import { ChartSegment } from './chartInteraction';
@@ -150,9 +151,17 @@ const MobileDashboard: React.FC<{
   }, [dateRange, selectedAccounts]);
 
   // Clear the tag filter if the selected tag no longer exists (e.g. the last
-  // transaction with that tag was deleted or had its tag changed).
+  // transaction with that tag was deleted or had its tag changed). The recurring
+  // filter remains valid while any recurring transaction exists.
   React.useEffect(() => {
-    if (selectedTag && !props.txCache.tags.includes(selectedTag)) {
+    if (!selectedTag) {
+      return;
+    }
+    const stillValid =
+      selectedTag === RECURRING_TAG_FILTER
+        ? props.txCache.tags.some(isRecurringTag)
+        : props.txCache.tags.includes(selectedTag);
+    if (!stillValid) {
       setSelectedTag(null);
     }
   }, [props.txCache.tags, selectedTag]);
@@ -260,9 +269,17 @@ const DesktopDashboard: React.FC<{
   }, [dateRange, selectedAccounts]);
 
   // Clear the tag filter if the selected tag no longer exists (e.g. the last
-  // transaction with that tag was deleted or had its tag changed).
+  // transaction with that tag was deleted or had its tag changed). The recurring
+  // filter remains valid while any recurring transaction exists.
   React.useEffect(() => {
-    if (selectedTag && !props.txCache.tags.includes(selectedTag)) {
+    if (!selectedTag) {
+      return;
+    }
+    const stillValid =
+      selectedTag === RECURRING_TAG_FILTER
+        ? props.txCache.tags.some(isRecurringTag)
+        : props.txCache.tags.includes(selectedTag);
+    if (!stillValid) {
       setSelectedTag(null);
     }
   }, [props.txCache.tags, selectedTag]);

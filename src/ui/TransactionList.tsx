@@ -12,7 +12,8 @@ import {
   filterByTag,
   filterTransactions,
   getTotal,
-  getTransactionTags,
+  getVisibleTransactionTags,
+  RECURRING_TAG_FILTER,
 } from '../transaction-utils';
 import { ChartSegment } from './chartInteraction';
 import { RecurringPill } from './Recurring';
@@ -21,6 +22,25 @@ import { Moment } from 'moment';
 import React from 'react';
 import { Column, useFilters, useSortBy, useTable } from 'react-table';
 import styled from 'styled-components';
+
+/**
+ * applyTagFilter narrows the transactions to the selected tag. The special
+ * recurring filter value matches all transactions generated from a schedule.
+ */
+const applyTagFilter = (
+  txs: EnhancedTransaction[],
+  selectedTag: string | null,
+): EnhancedTransaction[] => {
+  if (!selectedTag) {
+    return txs;
+  }
+  return filterTransactions(
+    txs,
+    selectedTag === RECURRING_TAG_FILTER
+      ? isRecurringInstance
+      : filterByTag(selectedTag),
+  );
+};
 
 /**
  * SegmentBanner shows which chart segment the transaction list is currently
@@ -176,12 +196,10 @@ export const MobileTransactionList: React.FC<{
       filteredTransactions,
       filterByEndDate(end),
     );
-    if (props.selectedTag) {
-      filteredTransactions = filterTransactions(
-        filteredTransactions,
-        filterByTag(props.selectedTag),
-      );
-    }
+    filteredTransactions = applyTagFilter(
+      filteredTransactions,
+      props.selectedTag,
+    );
 
     // Sort so most recent transactions come first
     return [...filteredTransactions].sort((a, b) => {
@@ -257,7 +275,7 @@ export const MobileTransactionEntry: React.FC<{
       : '';
   const to =
     nonCommentLines.length === 2 ? nonCommentLines[0].account : 'Multiple';
-  const tags = getTransactionTags(props.tx);
+  const tags = getVisibleTransactionTags(props.tx);
 
   return (
     <div className="mobile-tx-card">
@@ -393,7 +411,7 @@ const buildTableRows = (
       return {
         date: tx.value.date,
         payee: tx.value.payee,
-        tags: getTransactionTags(tx),
+        tags: getVisibleTransactionTags(tx),
         recurring: isRecurringInstance(tx),
         total: getTotal(tx, currencySymbol),
         from: nonCommentLines[1].account,
@@ -405,7 +423,7 @@ const buildTableRows = (
     return {
       date: tx.value.date,
       payee: tx.value.payee,
-      tags: getTransactionTags(tx),
+      tags: getVisibleTransactionTags(tx),
       recurring: isRecurringInstance(tx),
       total: getTotal(tx, currencySymbol),
       from: nonCommentLines[nonCommentLines.length - 1].account,
@@ -451,12 +469,10 @@ export const RecentTransactionList: React.FC<{
       filteredTransactions,
       filterByEndDate(end),
     );
-    if (props.selectedTag) {
-      filteredTransactions = filterTransactions(
-        filteredTransactions,
-        filterByTag(props.selectedTag),
-      );
-    }
+    filteredTransactions = applyTagFilter(
+      filteredTransactions,
+      props.selectedTag,
+    );
     return buildTableRows(
       filteredTransactions,
       props.currencySymbol,
@@ -509,12 +525,10 @@ export const TransactionList: React.FC<{
       filteredTransactions,
       filterByEndDate(end),
     );
-    if (props.selectedTag) {
-      filteredTransactions = filterTransactions(
-        filteredTransactions,
-        filterByTag(props.selectedTag),
-      );
-    }
+    filteredTransactions = applyTagFilter(
+      filteredTransactions,
+      props.selectedTag,
+    );
     return buildTableRows(
       filteredTransactions,
       props.currencySymbol,

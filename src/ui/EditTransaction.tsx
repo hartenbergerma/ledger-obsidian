@@ -16,7 +16,9 @@ import {
   getAccountsForPayee,
   getMemoFromComment,
   getTotalAsNum,
-  getTransactionTag,
+  getTransactionTags,
+  isRecurringInstance,
+  isRecurringTag,
 } from '../transaction-utils';
 import { CurrencyInputFormik } from './CurrencyInput';
 import {
@@ -523,6 +525,14 @@ export const EditTransaction: React.FC<{
   // it rather than from a regular transaction.
   const recurringEdit = props.initialRecurring;
   const isNew = props.operation === 'new' && !recurringEdit;
+  // A recurring instance (a transaction generated from a schedule) cannot itself
+  // be made recurring, so the recurrence control is hidden when editing one. Its
+  // recurring marker tag is preserved on save.
+  const editingInstance =
+    !recurringEdit && isRecurringInstance(props.initialState);
+  const preservedRecurringTags = editingInstance
+    ? getTransactionTags(props.initialState).filter(isRecurringTag)
+    : [];
   const [page, setPage] = React.useState(1);
 
   // When editing a recurring transaction, present it to the rest of the form as
@@ -591,7 +601,11 @@ export const EditTransaction: React.FC<{
       ? window.moment().format('YYYY-MM-DD')
       : window.moment(effectiveInitial.value.date).format('YYYY-MM-DD'),
     total: isNew ? '' : getTotalAsNum(effectiveInitial).toString(),
-    tag: isNew ? '' : getTransactionTag(effectiveInitial),
+    tag: isNew
+      ? ''
+      : getTransactionTags(effectiveInitial).filter(
+          (t) => !isRecurringTag(t),
+        )[0] || '',
     recurring: recurringEdit
       ? {
           enabled: true,
@@ -705,16 +719,21 @@ export const EditTransaction: React.FC<{
           }
 
           // Preserve any existing memo text in the transaction comment while
-          // applying the (possibly changed or cleared) tag.
+          // applying the (possibly changed or cleared) tag. When editing a
+          // recurring instance, its recurring marker tag is preserved too.
           const memo = getMemoFromComment(effectiveInitial.value.comment);
-          const comment = formatComment(memo, values.tag ? [values.tag] : []);
+          const comment = formatComment(memo, [
+            ...(values.tag ? [values.tag] : []),
+            ...preservedRecurringTags,
+          ]);
 
           const expenselines = values.lines.map((line) =>
             lineToEnhancedExpenseLine(line),
           );
 
-          // When the recurrence toggle is on, save a recurring transaction
-          // rather than appending a one-off transaction.
+          // When the recurrence toggle is on, save a recurring transaction. For
+          // a brand new schedule a first transaction is also added immediately
+          // for the date entered on the first page.
           if (values.recurring.enabled) {
             const period = {
               intervalCount: values.recurring.intervalCount,
@@ -742,7 +761,11 @@ export const EditTransaction: React.FC<{
               expenselines,
               block: recurringEdit ? recurringEdit.block : undefined,
             };
-            props.updater.saveRecurring(rt).then(props.close);
+            if (recurringEdit) {
+              props.updater.saveRecurring(rt).then(props.close);
+            } else {
+              props.updater.createRecurring(rt, values.date).then(props.close);
+            }
             return;
           }
 
@@ -895,12 +918,14 @@ export const EditTransaction: React.FC<{
                           allTags={props.txCache.tags}
                           onChange={(tag) => formik.setFieldValue('tag', tag)}
                         />
-                        <RecurringSelect
-                          value={formik.values.recurring}
-                          onChange={(recurring) =>
-                            formik.setFieldValue('recurring', recurring)
-                          }
-                        />
+                        {!editingInstance && (
+                          <RecurringSelect
+                            value={formik.values.recurring}
+                            onChange={(recurring) =>
+                              formik.setFieldValue('recurring', recurring)
+                            }
+                          />
+                        )}
                       </div>
                     </>
                   )}

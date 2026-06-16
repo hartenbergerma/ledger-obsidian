@@ -122,40 +122,94 @@ const RecurringPillStyle = styled.span`
     opacity: 1;
     background: var(--background-modifier-hover);
   }
+
+  &.clickable {
+    cursor: pointer;
+  }
+
+  &.clickable:hover {
+    color: var(--text-normal);
+    background: var(--background-modifier-hover);
+  }
+
+  &.selected {
+    color: var(--text-on-accent);
+    background: var(--interactive-accent);
+    border-color: var(--interactive-accent);
+  }
 `;
 
 /**
+ * InfoIcon renders a small circled "i" whose tooltip (title) explains a
+ * control. Used where a label is kept short for layout reasons.
+ */
+export const InfoIcon: React.FC<{ title: string }> = ({
+  title,
+}): JSX.Element => (
+  <span className="ledger-info-icon" title={title} aria-label={title}>
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="16" x2="12" y2="12" />
+      <line x1="12" y1="8" x2="12.01" y2="8" />
+    </svg>
+  </span>
+);
+
+/**
  * RecurringPill renders a small rounded pill with the recurring icon and an
- * optional label, mirroring how tags are displayed. When onRemove is provided it
- * shows an "×" to clear the recurrence.
+ * optional label, mirroring how tags are displayed. When onClick is provided it
+ * behaves as a button (e.g. to edit the recurrence or filter by it), and when
+ * onRemove is provided it shows an "×" to clear the recurrence.
  */
 export const RecurringPill: React.FC<{
   label?: string;
   title?: string;
+  selected?: boolean;
+  onClick?: () => void;
   onRemove?: () => void;
-}> = ({ label, title, onRemove }): JSX.Element => (
-  <RecurringPillStyle
-    className="ledger-recurring"
-    title={title || label || 'Recurring'}
-  >
-    <RecurringIcon />
-    {label ? <span className="ledger-recurring-label">{label}</span> : null}
-    {onRemove ? (
-      <span
-        className="ledger-recurring-remove"
-        aria-label="Remove recurrence"
-        role="button"
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={(e) => {
-          e.stopPropagation();
-          onRemove();
-        }}
-      >
-        ×
-      </span>
-    ) : null}
-  </RecurringPillStyle>
-);
+}> = ({ label, title, selected, onClick, onRemove }): JSX.Element => {
+  const className = [
+    'ledger-recurring',
+    onClick ? 'clickable' : '',
+    selected ? 'selected' : '',
+  ]
+    .filter((c) => c)
+    .join(' ');
+  return (
+    <RecurringPillStyle
+      className={className}
+      title={title || label || 'Recurring'}
+      onClick={onClick}
+      onMouseDown={onClick ? (e) => e.preventDefault() : undefined}
+    >
+      <RecurringIcon />
+      {label ? <span className="ledger-recurring-label">{label}</span> : null}
+      {onRemove ? (
+        <span
+          className="ledger-recurring-remove"
+          aria-label="Remove recurrence"
+          role="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+        >
+          ×
+        </span>
+      ) : null}
+    </RecurringPillStyle>
+  );
+};
 
 const RecurringSelectStyle = styled.div`
   display: flex;
@@ -208,6 +262,19 @@ const RecurringSelectStyle = styled.div`
     align-items: center;
     gap: 6px;
     font-size: 0.9em;
+    white-space: nowrap;
+  }
+
+  .ledger-recurring-checkbox input[type='checkbox'] {
+    margin: 0;
+    flex-shrink: 0;
+  }
+
+  .ledger-info-icon {
+    display: inline-flex;
+    align-items: center;
+    color: var(--text-muted);
+    cursor: help;
   }
 
   .ledger-recurring-panel-buttons {
@@ -242,17 +309,12 @@ export const RecurringSelect: React.FC<{
         <RecurringPill
           label={summarizeRecurrence(value)}
           title="Edit recurrence"
-          onRemove={() => onChange({ ...value, enabled: false })}
-        />
-        <a
-          className="ledger-recurring-edit-link"
           onClick={() => {
             setDraft(value);
             setOpen(true);
           }}
-        >
-          edit schedule
-        </a>
+          onRemove={() => onChange({ ...value, enabled: false })}
+        />
       </RecurringSelectStyle>
     );
   }
@@ -348,7 +410,14 @@ export const RecurringSelect: React.FC<{
             checked={draft.adjustToWorkday}
             onChange={(e) => update({ adjustToWorkday: e.target.checked })}
           />
-          Move to next working day if on a weekend/holiday
+          Workdays only
+          <InfoIcon
+            title={
+              'If an occurrence falls on a weekend or public holiday, move it ' +
+              'to the next working day. Choose your country under the plugin ' +
+              'settings (Holiday Country).'
+            }
+          />
         </label>
 
         <div className="ledger-recurring-panel-buttons">

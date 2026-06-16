@@ -153,14 +153,19 @@ describe('due dates', () => {
 
 describe('materializeTransaction', () => {
   test('creates a transaction marked as a recurring instance', () => {
-    const tx = materializeTransaction(
-      { ...monthlyRent, nextDate: '2026-07-04' },
-      '',
-    );
+    const rt = { ...monthlyRent, nextDate: '2026-07-04' };
+    // The caller passes the date; here the working-day-adjusted due date.
+    const tx = materializeTransaction(rt, effectiveDueDate(rt, ''));
     expect(tx.value.payee).toBe('Rent');
     expect(tx.value.date).toBe('2026/07/06'); // adjusted to Monday, slashes
-    expect(tx.value.comment).toBe('monthly rent #housing');
+    // The recurring marker is stored as a tag alongside the user's tags.
+    expect(tx.value.comment).toBe('monthly rent #housing #recurring-abc123');
     expect(isRecurringInstance(tx)).toBe(true);
+  });
+
+  test('uses exactly the provided date without adjustment', () => {
+    const tx = materializeTransaction(monthlyRent, '2026-09-15');
+    expect(tx.value.date).toBe('2026/09/15');
   });
 });
 

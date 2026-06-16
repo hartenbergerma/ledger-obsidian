@@ -117,22 +117,30 @@ const RecurringStyles = styled.div`
 
   .ledger-recurring-actions {
     white-space: nowrap;
-    text-align: right;
   }
 
-  .ledger-recurring-actions button {
-    margin-left: 6px;
+  .ledger-recurring-action-group {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
   }
 
-  .ledger-recurring-actions .ledger-recurring-icon-button {
+  .ledger-recurring-action-group button {
+    margin: 0;
+  }
+
+  .ledger-recurring-icon-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     padding: 4px 6px;
-    line-height: 0;
   }
 
   .ledger-recurring-actions svg {
+    display: block;
     fill: var(--text-muted);
     stroke: none;
-    vertical-align: middle;
   }
 `;
 
@@ -206,12 +214,13 @@ const useRecurringRows = (
     return txCache.recurringTransactions
       .map((rt): RecurringRow => {
         const { from, to } = accountsFor(rt);
+        const dueDate = effectiveDueDate(rt, country);
         return {
           rt,
-          dueDate: effectiveDueDate(rt, country),
+          dueDate,
           due: isDue(rt, today, country),
           total: getTotal(
-            materializeTransaction(rt, country),
+            materializeTransaction(rt, dueDate),
             settings.currencySymbol,
           ),
           from,
@@ -274,29 +283,29 @@ export const RecurringList: React.FC<{
               <td>{from}</td>
               <td>{to}</td>
               <td className="ledger-recurring-actions">
-                {due ? (
+                <div className="ledger-recurring-action-group">
                   <button
                     onClick={() => props.updater.promptAcceptRecurring(rt)}
                   >
                     Add now
                   </button>
-                ) : null}
-                <button
-                  className="ledger-recurring-icon-button"
-                  aria-label="Edit recurring transaction"
-                  title="Edit"
-                  onClick={() => props.updater.openRecurringEditModal(rt)}
-                >
-                  <EditIcon />
-                </button>
-                <button
-                  className="ledger-recurring-icon-button"
-                  aria-label="Remove recurring transaction"
-                  title="Skip or delete"
-                  onClick={() => props.updater.promptRemoveRecurring(rt)}
-                >
-                  <RemoveIcon />
-                </button>
+                  <button
+                    className="ledger-recurring-icon-button"
+                    aria-label="Edit recurring transaction"
+                    title="Edit"
+                    onClick={() => props.updater.openRecurringEditModal(rt)}
+                  >
+                    <EditIcon />
+                  </button>
+                  <button
+                    className="ledger-recurring-icon-button"
+                    aria-label="Remove recurring transaction"
+                    title="Skip or delete"
+                    onClick={() => props.updater.promptRemoveRecurring(rt)}
+                  >
+                    <RemoveIcon />
+                  </button>
+                </div>
               </td>
             </tr>
           ))}
@@ -340,11 +349,9 @@ export const MobileRecurringList: React.FC<{
             {from} ➜ {to}
           </div>
           <div className="ledger-recurring-card-actions">
-            {due ? (
-              <button onClick={() => props.updater.promptAcceptRecurring(rt)}>
-                Add now
-              </button>
-            ) : null}
+            <button onClick={() => props.updater.promptAcceptRecurring(rt)}>
+              Add now
+            </button>
             <button onClick={() => props.updater.openRecurringEditModal(rt)}>
               Edit
             </button>

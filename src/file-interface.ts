@@ -3,6 +3,7 @@ import {
   AddExpenseModal,
   ConfirmModal,
   Operation,
+  RecurringAcceptModal,
   RecurringRemoveModal,
 } from './modals';
 import { EnhancedTransaction, parse, TransactionCache } from './parser';
@@ -12,6 +13,7 @@ import {
   formatRecurringTransaction,
   insertRecurringTransaction,
   materializeTransaction,
+  nextNominalDate,
   RecurringTransaction,
 } from './recurring';
 import type { ISettings } from './settings';
@@ -146,33 +148,60 @@ export class LedgerModifier {
   }
 
   /**
-   * acceptRecurring materializes the current occurrence of a recurring
-   * transaction into the transactions, then advances the schedule.
+   * acceptRecurring adds an occurrence of a recurring transaction to the
+   * transactions on the provided date, then advances the schedule to its next
+   * regular occurrence. The chosen date only affects the created transaction —
+   * the schedule's own timing is always advanced based on the schedule, even
+   * when the occurrence is added before it is due.
    */
-  public async acceptRecurring(rt: RecurringTransaction): Promise<void> {
-    const tx = materializeTransaction(rt, this.plugin.settings.holidayCountry);
+  public async acceptRecurring(
+    rt: RecurringTransaction,
+    dateISO: string,
+  ): Promise<void> {
+    const tx = materializeTransaction(rt, dateISO);
     const txStr = formatTransaction(tx, this.plugin.settings.currencySymbol);
     await this.appendLedger(txStr);
     await this.skipRecurring(rt);
   }
 
   /**
-   * promptAcceptRecurring confirms before adding the due occurrence of a
-   * recurring transaction to the ledger.
+   * createRecurring saves a new schedule and immediately adds a first
+   * transaction for the provided date. The schedule's next occurrence is set to
+   * the next regular date after the one just added.
+   */
+  public async createRecurring(
+    rt: RecurringTransaction,
+    firstDateISO: string,
+  ): Promise<void> {
+    const tx = materializeTransaction(rt, firstDateISO);
+    const txStr = formatTransaction(tx, this.plugin.settings.currencySymbol);
+    await this.appendLedger(txStr);
+
+    // The schedule's nextDate was computed as the first occurrence on or after
+    // firstDateISO. If that is the date we just added, advance one more so the
+    // same occurrence is not offered again.
+    const nextDate =
+      rt.nextDate === firstDateISO ? nextNominalDate(rt) : rt.nextDate;
+    await this.saveRecurring({ ...rt, nextDate });
+  }
+
+  /**
+   * promptAcceptRecurring confirms before adding an occurrence of a recurring
+   * transaction, letting the user adjust the transaction date.
    */
   public promptAcceptRecurring(rt: RecurringTransaction): void {
     const dueDate = effectiveDueDate(rt, this.plugin.settings.holidayCountry);
     const total = getTotal(
-      materializeTransaction(rt, this.plugin.settings.holidayCountry),
+      materializeTransaction(rt, dueDate),
       this.plugin.settings.currencySymbol,
     );
-    new ConfirmModal(
+    new RecurringAcceptModal(
       this.plugin.app,
-      'Add recurring transaction',
-      `Add "${rt.payee}" for ${total} dated ${dueDate} to your ledger?`,
-      'Add',
-      () => {
-        this.acceptRecurring(rt);
+      rt.payee,
+      total,
+      dueDate,
+      (dateISO: string) => {
+        this.acceptRecurring(rt, dateISO);
       },
     ).open();
   }

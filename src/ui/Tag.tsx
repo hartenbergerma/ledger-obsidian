@@ -1,4 +1,9 @@
-import { sanitizeTag } from '../transaction-utils';
+import {
+  isRecurringTag,
+  RECURRING_TAG_FILTER,
+  sanitizeTag,
+} from '../transaction-utils';
+import { RecurringPill } from './Recurring';
 import React from 'react';
 import styled from 'styled-components';
 
@@ -352,13 +357,18 @@ export const TagFilter: React.FC<{
   selectedTag: string | null;
   onToggleTag: (tag: string) => void;
 }> = ({ allTags, selectedTag, onToggleTag }): JSX.Element | null => {
-  if (allTags.length === 0) {
+  // The recurring marker tags are not shown as ordinary tag pills; instead a
+  // single recurring icon filters down to all recurring transactions.
+  const normalTags = allTags.filter((t) => !isRecurringTag(t));
+  const hasRecurring = allTags.some(isRecurringTag);
+
+  if (normalTags.length === 0 && !hasRecurring) {
     return null;
   }
   return (
     <TagFilterStyle className="ledger-tag-filter">
       <span className="ledger-tag-filter-label">Filter by tag:</span>
-      {allTags.map((t) => (
+      {normalTags.map((t) => (
         <TagPill
           key={t}
           tag={t}
@@ -366,6 +376,13 @@ export const TagFilter: React.FC<{
           onClick={() => onToggleTag(t)}
         />
       ))}
+      {hasRecurring ? (
+        <RecurringPill
+          title="Show recurring transactions"
+          selected={selectedTag === RECURRING_TAG_FILTER}
+          onClick={() => onToggleTag(RECURRING_TAG_FILTER)}
+        />
+      ) : null}
     </TagFilterStyle>
   );
 };
