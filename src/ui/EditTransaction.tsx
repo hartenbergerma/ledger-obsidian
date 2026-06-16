@@ -6,6 +6,11 @@ import {
   TransactionCache,
 } from '../parser';
 import {
+  firstOccurrenceOnOrAfter,
+  makeRecurId,
+  RecurringTransaction,
+} from '../recurring';
+import {
   formatComment,
   formatTransaction,
   getAccountsForPayee,
@@ -14,6 +19,11 @@ import {
   getTransactionTag,
 } from '../transaction-utils';
 import { CurrencyInputFormik } from './CurrencyInput';
+import {
+  defaultRecurringValue,
+  RecurringFormValue,
+  RecurringSelect,
+} from './Recurring';
 import { TagSelect } from './Tag';
 import { TextSuggest } from './TextSuggest';
 import {
@@ -484,6 +494,12 @@ export interface Values {
    * `#`. An empty string means the transaction is untagged.
    */
   tag: string;
+
+  /**
+   * recurring holds the recurrence configuration. When `recurring.enabled` is
+   * true the form saves a recurring transaction instead of a one-off one.
+   */
+  recurring: RecurringFormValue;
 }
 
 interface ValueErrors {
@@ -497,20 +513,40 @@ export const EditTransaction: React.FC<{
   displayFileWarning: boolean;
   currencySymbol: string;
   initialState: EnhancedTransaction;
+  initialRecurring?: RecurringTransaction;
   operation: Operation;
   updater: LedgerModifier;
   txCache: TransactionCache;
   close: () => void;
 }> = (props): JSX.Element => {
-  const isNew = props.operation === 'new';
+  // When editing an existing recurring transaction the form is pre-filled from
+  // it rather than from a regular transaction.
+  const recurringEdit = props.initialRecurring;
+  const isNew = props.operation === 'new' && !recurringEdit;
   const [page, setPage] = React.useState(1);
+
+  // When editing a recurring transaction, present it to the rest of the form as
+  // if it were a regular transaction so the existing pre-fill logic applies.
+  const effectiveInitial: EnhancedTransaction = recurringEdit
+    ? {
+        type: 'tx',
+        blockLine: -1,
+        block: { firstLine: -1, lastLine: -1, block: '' },
+        value: {
+          date: recurringEdit.nextDate,
+          payee: recurringEdit.payee,
+          comment: recurringEdit.comment,
+          expenselines: recurringEdit.expenselines,
+        },
+      }
+    : props.initialState;
 
   // Tracks the payee that the account fields were last auto-filled for, so that
   // simply re-focusing the payee field does not clobber edits the user has
   // made. It is initialized to the starting payee so that opening an existing
   // transaction does not immediately overwrite its accounts.
   const lastAutofilledPayee = React.useRef<string>(
-    isNew ? '' : props.initialState.value.payee,
+    isNew ? '' : effectiveInitial.value.payee,
   );
 
   /**
@@ -549,13 +585,23 @@ export const EditTransaction: React.FC<{
   };
 
   const initialValues: Values = {
-    payee: isNew ? '' : props.initialState.value.payee,
+    payee: isNew ? '' : effectiveInitial.value.payee,
     txType: isNew ? 'expense' : 'unknown',
     date: isNew
       ? window.moment().format('YYYY-MM-DD')
-      : window.moment(props.initialState.value.date).format('YYYY-MM-DD'),
-    total: isNew ? '' : getTotalAsNum(props.initialState).toString(),
-    tag: isNew ? '' : getTransactionTag(props.initialState),
+      : window.moment(effectiveInitial.value.date).format('YYYY-MM-DD'),
+    total: isNew ? '' : getTotalAsNum(effectiveInitial).toString(),
+    tag: isNew ? '' : getTransactionTag(effectiveInitial),
+    recurring: recurringEdit
+      ? {
+          enabled: true,
+          intervalCount: recurringEdit.intervalCount,
+          unit: recurringEdit.unit,
+          weekday: recurringEdit.weekday ?? 1,
+          dayOfMonth: recurringEdit.dayOfMonth ?? 1,
+          adjustToWorkday: recurringEdit.adjustToWorkday,
+        }
+      : defaultRecurringValue,
     lines: isNew
       ? [
           {
@@ -573,7 +619,7 @@ export const EditTransaction: React.FC<{
             reconcile: '',
           },
         ]
-      : props.initialState.value.expenselines
+      : effectiveInitial.value.expenselines
           .filter((line): line is EnhancedExpenseLine => 'account' in line)
           .map(
             (line, i): Line => ({
@@ -589,7 +635,7 @@ export const EditTransaction: React.FC<{
 
   return (
     <FormStyles>
-      <h2>Add to Ledger</h2>
+      <h2>{recurringEdit ? 'Edit Recurring Transaction' : 'Add to Ledger'}</h2>
 
       {props.displayFileWarning ? (
         <Warning>
@@ -660,8 +706,44 @@ export const EditTransaction: React.FC<{
 
           // Preserve any existing memo text in the transaction comment while
           // applying the (possibly changed or cleared) tag.
-          const memo = getMemoFromComment(props.initialState.value.comment);
+          const memo = getMemoFromComment(effectiveInitial.value.comment);
           const comment = formatComment(memo, values.tag ? [values.tag] : []);
+
+          const expenselines = values.lines.map((line) =>
+            lineToEnhancedExpenseLine(line),
+          );
+
+          // When the recurrence toggle is on, save a recurring transaction
+          // rather than appending a one-off transaction.
+          if (values.recurring.enabled) {
+            const period = {
+              intervalCount: values.recurring.intervalCount,
+              unit: values.recurring.unit,
+              weekday: values.recurring.weekday,
+              dayOfMonth: values.recurring.dayOfMonth,
+            };
+            const rt: RecurringTransaction = {
+              id: recurringEdit ? recurringEdit.id : makeRecurId(),
+              intervalCount: values.recurring.intervalCount,
+              unit: values.recurring.unit,
+              weekday:
+                values.recurring.unit === 'week'
+                  ? values.recurring.weekday
+                  : undefined,
+              dayOfMonth:
+                values.recurring.unit === 'month'
+                  ? values.recurring.dayOfMonth
+                  : undefined,
+              nextDate: firstOccurrenceOnOrAfter(values.date, period),
+              endDate: recurringEdit ? recurringEdit.endDate : undefined,
+              adjustToWorkday: values.recurring.adjustToWorkday,
+              payee: localPayee,
+              comment,
+              expenselines,
+            };
+            props.updater.saveRecurring(rt).then(props.close);
+            return;
+          }
 
           // This tx is not fully valid because we are not specifying a valid block.
           // It's only complete enough that we can format it into a string.
@@ -677,10 +759,8 @@ export const EditTransaction: React.FC<{
               payee: localPayee,
               // TODO: This is not a ISO8601. Once reconciliation is added, remove this and reformat file.
               date: values.date.replace(/-/g, '/'),
-              expenselines: values.lines.map((line) =>
-                lineToEnhancedExpenseLine(line),
-              ),
-              check: props.initialState.value.check,
+              expenselines,
+              check: effectiveInitial.value.check,
               comment,
             },
           };
@@ -813,6 +893,12 @@ export const EditTransaction: React.FC<{
                           tag={formik.values.tag}
                           allTags={props.txCache.tags}
                           onChange={(tag) => formik.setFieldValue('tag', tag)}
+                        />
+                        <RecurringSelect
+                          value={formik.values.recurring}
+                          onChange={(recurring) =>
+                            formik.setFieldValue('recurring', recurring)
+                          }
                         />
                       </div>
                     </>

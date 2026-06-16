@@ -1,4 +1,8 @@
-import { EnhancedExpenseLine, EnhancedTransaction } from './parser';
+import {
+  Commentline,
+  EnhancedExpenseLine,
+  EnhancedTransaction,
+} from './parser';
 import { some } from 'lodash';
 import { Moment } from 'moment';
 
@@ -14,14 +18,17 @@ export const emptyTransaction: EnhancedTransaction = {
 };
 
 /**
- * formatTransaction converts a transaction object into the string
- * representation which can be stored in the Ledger file.
+ * formatExpenseLines converts the expense (posting) lines of a transaction into
+ * their string representation. The final line with an account is written
+ * without an amount so that Ledger infers it, matching how the lines are
+ * parsed. Comment-only lines are preserved. This is shared by both regular
+ * transactions and recurring transaction definitions.
  */
-export const formatTransaction = (
-  tx: EnhancedTransaction,
+export const formatExpenseLines = (
+  lines: (EnhancedExpenseLine | Commentline)[],
   currencySymbol: string,
-): string => {
-  const joinedLines = tx.value.expenselines
+): string =>
+  lines
     .map((line, i) => {
       if (!('account' in line)) {
         return `    ; ${line.comment}`;
@@ -30,13 +37,23 @@ export const formatTransaction = (
       const currency = line.currency ? line.currency : currencySymbol;
       const symb = line.reconcile ? line.reconcile : ' ';
       const comment = line.comment ? `    ; ${line.comment}` : '';
-      return i !== tx.value.expenselines.length - 1
+      return i !== lines.length - 1
         ? `  ${symb} ${line.account}    ${currency}${line.amount.toFixed(
             2,
           )}${comment}`
         : `  ${symb} ${line.account}${comment}`;
     })
     .join('\n');
+
+/**
+ * formatTransaction converts a transaction object into the string
+ * representation which can be stored in the Ledger file.
+ */
+export const formatTransaction = (
+  tx: EnhancedTransaction,
+  currencySymbol: string,
+): string => {
+  const joinedLines = formatExpenseLines(tx.value.expenselines, currencySymbol);
   // The transaction-level comment holds any memo text and the transaction's tag
   // (e.g. `; lunch #work`). It is written on the same line as the payee.
   const txComment = tx.value.comment ? `    ; ${tx.value.comment}` : '';

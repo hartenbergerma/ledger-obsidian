@@ -4,6 +4,7 @@ import {
   EnhancedTransaction,
   TransactionCache,
 } from '../parser';
+import { isRecurringInstance } from '../recurring';
 import {
   filterByAccount,
   filterByEndDate,
@@ -14,6 +15,7 @@ import {
   getTransactionTags,
 } from '../transaction-utils';
 import { ChartSegment } from './chartInteraction';
+import { RecurringPill } from './Recurring';
 import { TagFilter, TagPill } from './Tag';
 import { Moment } from 'moment';
 import React from 'react';
@@ -262,6 +264,9 @@ export const MobileTransactionEntry: React.FC<{
       <div className="mobile-tx-row">
         <span className="mobile-tx-payee">
           <span className="mobile-tx-payee-name">{props.tx.value.payee}</span>
+          {isRecurringInstance(props.tx) ? (
+            <RecurringPill title="Generated from a recurring transaction" />
+          ) : null}
           {tags.map((tag) => (
             <TagPill
               key={tag}
@@ -355,6 +360,7 @@ interface TableRow {
   date: string;
   payee: string;
   tags: string[];
+  recurring: boolean;
   total: string;
   from: string;
   to: string | JSX.Element;
@@ -388,6 +394,7 @@ const buildTableRows = (
         date: tx.value.date,
         payee: tx.value.payee,
         tags: getTransactionTags(tx),
+        recurring: isRecurringInstance(tx),
         total: getTotal(tx, currencySymbol),
         from: nonCommentLines[1].account,
         to: nonCommentLines[0].account,
@@ -399,6 +406,7 @@ const buildTableRows = (
       date: tx.value.date,
       payee: tx.value.payee,
       tags: getTransactionTags(tx),
+      recurring: isRecurringInstance(tx),
       total: getTotal(tx, currencySymbol),
       from: nonCommentLines[nonCommentLines.length - 1].account,
       to: <i>Multiple</i>,
@@ -535,6 +543,9 @@ const PayeeCell: React.FC<{
 }> = ({ row, onSelectTag }): JSX.Element => (
   <span className="ledger-tx-payee-cell">
     <span className="ledger-tx-payee-name">{row.payee}</span>
+    {row.recurring ? (
+      <RecurringPill title="Generated from a recurring transaction" />
+    ) : null}
     {row.tags.map((tag) => (
       <TagPill
         key={tag}

@@ -1,6 +1,7 @@
 import { LedgerModifier } from './file-interface';
 import LedgerPlugin from './main';
 import { EnhancedTransaction } from './parser';
+import { RecurringTransaction } from './recurring';
 import { emptyTransaction } from './transaction-utils';
 import { EditTransaction } from './ui/EditTransaction';
 import { App, Modal } from 'obsidian';
@@ -59,23 +60,85 @@ export class ConfirmModal extends Modal {
   };
 }
 
+/**
+ * RecurringRemoveModal asks the user whether they want to skip just the next
+ * occurrence of a recurring transaction or delete the schedule entirely.
+ */
+export class RecurringRemoveModal extends Modal {
+  private readonly recurring: RecurringTransaction;
+  private readonly onSkip: () => void;
+  private readonly onDelete: () => void;
+
+  constructor(
+    app: App,
+    recurring: RecurringTransaction,
+    onSkip: () => void,
+    onDelete: () => void,
+  ) {
+    super(app);
+    this.recurring = recurring;
+    this.onSkip = onSkip;
+    this.onDelete = onDelete;
+  }
+
+  public onOpen = (): void => {
+    this.titleEl.setText('Remove recurring transaction');
+    this.contentEl.createEl('p', {
+      text:
+        'What would you like to do with the recurring transaction ' +
+        `"${this.recurring.payee}"?`,
+    });
+
+    const buttonContainer = this.contentEl.createDiv({
+      cls: 'modal-button-container',
+    });
+
+    const cancelButton = buttonContainer.createEl('button', { text: 'Cancel' });
+    cancelButton.addEventListener('click', () => this.close());
+
+    const skipButton = buttonContainer.createEl('button', {
+      text: 'Skip this occurrence',
+    });
+    skipButton.addEventListener('click', () => {
+      this.onSkip();
+      this.close();
+    });
+
+    const deleteButton = buttonContainer.createEl('button', {
+      text: 'Delete schedule',
+      cls: 'mod-warning',
+    });
+    deleteButton.addEventListener('click', () => {
+      this.onDelete();
+      this.close();
+    });
+  };
+
+  public onClose = (): void => {
+    this.contentEl.empty();
+  };
+}
+
 export class AddExpenseModal extends Modal {
   private readonly plugin: LedgerPlugin;
   private readonly updater: LedgerModifier;
   private readonly operation: Operation;
   private readonly initialState: EnhancedTransaction;
+  private readonly initialRecurring?: RecurringTransaction;
 
   constructor(
     plugin: LedgerPlugin,
     updater: LedgerModifier,
     operation: Operation,
     initialState?: EnhancedTransaction,
+    initialRecurring?: RecurringTransaction,
   ) {
     super(plugin.app);
     this.plugin = plugin;
     this.updater = updater;
     this.operation = operation;
     this.initialState = initialState || emptyTransaction;
+    this.initialRecurring = initialRecurring;
   }
 
   public onOpen = (): void => {
@@ -90,6 +153,7 @@ export class AddExpenseModal extends Modal {
           !this.plugin.settings.ledgerFile.endsWith('.ledger'),
         currencySymbol: this.plugin.settings.currencySymbol,
         initialState: this.initialState,
+        initialRecurring: this.initialRecurring,
         operation: this.operation,
         updater: this.updater,
         txCache: this.plugin.txCache,

@@ -30,6 +30,22 @@ safely in your Obsidian Vault instead.
     with any memo text and with the Ledger CLI.
   - Tagged transactions display their tag next to the payee in the transaction
     list, and you can filter the list down to a single tag.
+- [x] Recurring transactions to track regular bills, subscriptions, and income.
+  - Turn any transaction into a recurring one with the recurring (↻) button in
+    the "Add to Ledger" form, next to the "Tag" button. Choose to repeat every
+    _N_ weeks (on a weekday) or months (on a day of the month).
+  - Optionally move the evaluation date onto the next working day when it lands
+    on a weekend or public holiday. Select your country under the plugin
+    settings ("Holiday Country") to control which holidays are observed.
+  - Recurring transactions are listed in their own "Recurring" section below the
+    transaction list, sorted by their next evaluation date. When one is due you
+    can add it to your ledger with a single click (with a confirmation), skip a
+    single occurrence, edit the schedule, or delete it.
+  - Transactions created from a recurring schedule are marked with the recurring
+    (↻) icon next to the payee in the transaction list.
+  - Schedules are stored in your ledger file using Ledger's periodic-transaction
+    (`~`) syntax in a managed region above your transactions, so they remain
+    readable and compatible with the Ledger CLI.
 - [ ] Reporting (In progress!)
 - [ ] Account reconciliation (planned soon!)
 

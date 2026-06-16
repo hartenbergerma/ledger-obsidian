@@ -12,6 +12,7 @@ import { ChartSegment } from './chartInteraction';
 import { DateRangeSelector } from './DateRangeSelector';
 import { NetWorthVisualization } from './NetWorthVisualization';
 import { ParseErrors } from './ParseErrors';
+import { MobileRecurringList, RecurringList } from './RecurringList';
 import {
   FlexContainer,
   FlexFloatRight,
@@ -225,6 +226,12 @@ const MobileDashboard: React.FC<{
         segment={selectedSegment}
         onClearSegment={() => setSelectedSegment(null)}
       />
+
+      <MobileRecurringList
+        txCache={props.txCache}
+        updater={props.updater}
+        settings={props.settings}
+      />
     </MobileStyles>
   );
 };
@@ -344,6 +351,11 @@ const DesktopDashboard: React.FC<{
               />
             </>
           )}
+          <RecurringList
+            txCache={props.txCache}
+            updater={props.updater}
+            settings={props.settings}
+          />
         </FlexMainContent>
       </FlexContainer>
     </>

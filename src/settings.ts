@@ -8,6 +8,8 @@ const defaultSettings: ISettings = {
   expenseAccountsPrefix: 'Expenses',
   incomeAccountsPrefix: 'Income',
   liabilityAccountsPrefix: 'Liabilities',
+
+  holidayCountry: '',
 };
 
 export interface ISettings {
@@ -20,6 +22,13 @@ export interface ISettings {
   expenseAccountsPrefix: string;
   incomeAccountsPrefix: string;
   liabilityAccountsPrefix: string;
+
+  /**
+   * holidayCountry is the ISO country code used to look up public holidays when
+   * adjusting a recurring transaction's date onto a working day. An empty string
+   * means only weekends are treated as non-working days.
+   */
+  holidayCountry: string;
 }
 
 export const settingsWithDefaults = (

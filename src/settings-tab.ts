@@ -1,4 +1,5 @@
 import { buyMeACoffee, paypal } from './graphics';
+import { supportedCountries } from './holidays';
 import LedgerPlugin from './main';
 import { PluginSettingTab, Setting } from 'obsidian';
 
@@ -125,6 +126,26 @@ export class SettingsTab extends PluginSettingTab {
           ).value;
           this.plugin.saveData(this.plugin.settings);
         };
+      });
+
+    containerEl.createEl('h3', { text: 'Recurring Transactions' });
+
+    new Setting(containerEl)
+      .setName('Holiday Country')
+      .setDesc(
+        'Country whose public holidays are used when a recurring transaction ' +
+          'is set to move onto the next working day. Weekends are always ' +
+          'treated as non-working days.',
+      )
+      .addDropdown((dropdown) => {
+        supportedCountries.forEach((country) => {
+          dropdown.addOption(country.code, country.name);
+        });
+        dropdown.setValue(this.plugin.settings.holidayCountry);
+        dropdown.onChange((value) => {
+          this.plugin.settings.holidayCountry = value;
+          this.plugin.saveData(this.plugin.settings);
+        });
       });
 
     const div = containerEl.createEl('div', {
