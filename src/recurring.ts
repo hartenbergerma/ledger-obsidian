@@ -167,10 +167,43 @@ export const firstOccurrenceOnOrAfter = (
 };
 
 /**
+ * isOnAnchor returns true when the schedule's current nextDate falls on its
+ * regular anchor (the configured weekday for a weekly schedule, or day of the
+ * month for a monthly one). It is false when nextDate has been moved to a
+ * one-off, off-schedule date — for example because the user edited it to a
+ * specific next occurrence.
+ */
+export const isOnAnchor = (rt: RecurringTransaction): boolean => {
+  const m = window.moment(rt.nextDate, 'YYYY-MM-DD');
+  if (rt.unit === 'week') {
+    return m.day() === (rt.weekday ?? 1);
+  }
+  return m.date() === Math.min(rt.dayOfMonth ?? m.date(), m.daysInMonth());
+};
+
+/**
  * nextNominalDate advances the schedule by one interval from its current
  * nextDate, returning the new nominal date (YYYY-MM-DD).
+ *
+ * When nextDate is on the schedule's regular anchor this simply steps forward
+ * one interval. When nextDate has been moved to a one-off, off-schedule date
+ * (e.g. the user set the next occurrence to a specific day), the schedule
+ * resumes from the first regular occurrence strictly after that date, so the
+ * override only affects the single occurrence and the rhythm is preserved.
  */
 export const nextNominalDate = (rt: RecurringTransaction): string => {
+  if (!isOnAnchor(rt)) {
+    const dayAfter = window
+      .moment(rt.nextDate, 'YYYY-MM-DD')
+      .add(1, 'day')
+      .format('YYYY-MM-DD');
+    return firstOccurrenceOnOrAfter(dayAfter, {
+      intervalCount: rt.intervalCount,
+      unit: rt.unit,
+      weekday: rt.weekday,
+      dayOfMonth: rt.dayOfMonth,
+    });
+  }
   const m = window.moment(rt.nextDate, 'YYYY-MM-DD');
   if (rt.unit === 'week') {
     return m.add(rt.intervalCount, 'weeks').format('YYYY-MM-DD');

@@ -4,14 +4,14 @@ import { Moment } from 'moment';
 
 export type Interval = 'day' | 'week' | 'month';
 
-export type DateRange = 'week' | 'month' | '6months' | 'year' | 'all';
+export type DateRange = 'month' | '6months' | 'year' | 'all' | 'custom';
 
 export const dateRangeOptions: { id: DateRange; label: string }[] = [
-  { id: 'week', label: 'Last Week' },
   { id: 'month', label: 'Last Month' },
   { id: '6months', label: 'Last 6 Months' },
   { id: 'year', label: 'Last Year' },
   { id: 'all', label: 'All Time' },
+  { id: 'custom', label: 'Custom' },
 ];
 
 /**
@@ -34,29 +34,35 @@ export const chooseInterval = (
 /**
  * resolveDateRange converts a named date range into concrete start and end
  * dates and an automatically chosen graph resolution. The firstTxDate is used
- * as the beginning of the 'all' range.
+ * as the beginning of the 'all' range. For the 'custom' range the explicit
+ * customStart and customEnd dates are used (falling back to the full data
+ * window when they are not provided).
  */
 export const resolveDateRange = (
   range: DateRange,
   firstTxDate: Moment,
+  customStart?: Moment,
+  customEnd?: Moment,
 ): { startDate: Moment; endDate: Moment; interval: Interval } => {
-  const endDate = window.moment();
+  const now = window.moment();
   let startDate: Moment;
+  let endDate: Moment = now;
   switch (range) {
-    case 'week':
-      startDate = endDate.clone().subtract(1, 'week');
-      break;
     case 'month':
-      startDate = endDate.clone().subtract(1, 'month');
+      startDate = now.clone().subtract(1, 'month');
       break;
     case '6months':
-      startDate = endDate.clone().subtract(6, 'months');
+      startDate = now.clone().subtract(6, 'months');
       break;
     case 'year':
-      startDate = endDate.clone().subtract(1, 'year');
+      startDate = now.clone().subtract(1, 'year');
       break;
     case 'all':
-      startDate = window.moment.min(firstTxDate.clone(), endDate);
+      startDate = window.moment.min(firstTxDate.clone(), now);
+      break;
+    case 'custom':
+      startDate = (customStart ?? firstTxDate).clone();
+      endDate = (customEnd ?? now).clone();
       break;
   }
   return { startDate, endDate, interval: chooseInterval(startDate, endDate) };
@@ -66,8 +72,8 @@ export const resolveDateRange = (
  * isDateRangeAvailable determines whether a named date range is worth offering
  * given the date of the oldest transaction. A "Last ..." range is only useful
  * when there is data older than the start of that range; otherwise it would
- * show exactly the same data as a shorter range or "All Time". The 'all' range
- * is always available.
+ * show exactly the same data as a shorter range or "All Time". The 'all' and
+ * 'custom' ranges are always available.
  */
 export const isDateRangeAvailable = (
   range: DateRange,
@@ -76,9 +82,6 @@ export const isDateRangeAvailable = (
 ): boolean => {
   let rangeStart: Moment;
   switch (range) {
-    case 'week':
-      rangeStart = now.clone().subtract(1, 'week');
-      break;
     case 'month':
       rangeStart = now.clone().subtract(1, 'month');
       break;
@@ -89,6 +92,7 @@ export const isDateRangeAvailable = (
       rangeStart = now.clone().subtract(1, 'year');
       break;
     case 'all':
+    case 'custom':
       return true;
   }
   return firstTxDate.isBefore(rangeStart);

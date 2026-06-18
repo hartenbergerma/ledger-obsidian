@@ -56,10 +56,12 @@ export const summarizeRecurrence = (value: RecurringFormValue): string => {
 
 /**
  * RecurringIcon renders the "two arrows circling each other" repeat glyph used
- * throughout the UI to denote recurring transactions.
+ * throughout the UI to denote recurring transactions. The default size matches
+ * the tag icon (see TagIcon) so the recurring pill lines up with tag pills in
+ * the transaction list and tag filter bar.
  */
 export const RecurringIcon: React.FC<{ size?: number }> = ({
-  size = 12,
+  size = 10,
 }): JSX.Element => (
   <svg
     className="ledger-recurring-icon"

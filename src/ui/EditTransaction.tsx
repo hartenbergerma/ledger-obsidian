@@ -753,7 +753,14 @@ export const EditTransaction: React.FC<{
                 values.recurring.unit === 'month'
                   ? values.recurring.dayOfMonth
                   : undefined,
-              nextDate: firstOccurrenceOnOrAfter(values.date, period),
+              // When editing an existing schedule, the date entered is taken
+              // literally as the next occurrence (a one-off override); the
+              // schedule resumes on its regular anchor afterwards. For a brand
+              // new schedule, snap the start to the first matching occurrence of
+              // the chosen anchor.
+              nextDate: recurringEdit
+                ? values.date
+                : firstOccurrenceOnOrAfter(values.date, period),
               endDate: recurringEdit ? recurringEdit.endDate : undefined,
               adjustToWorkday: values.recurring.adjustToWorkday,
               payee: localPayee,

@@ -41,7 +41,6 @@ describe('chooseInterval()', () => {
 describe('resolveDateRange()', () => {
   const firstTxDate = moment('2021-01-15');
   test.each([
-    ['week', 'day'],
     ['month', 'day'],
     ['6months', 'week'],
     ['year', 'month'],
@@ -59,6 +58,20 @@ describe('resolveDateRange()', () => {
     const recentFirstTxDate = moment().subtract(3, 'days');
     const result = resolveDateRange('all', recentFirstTxDate);
     expect(result.interval).toEqual('day');
+  });
+  test('custom range uses the provided start and end dates', () => {
+    const start = moment('2021-03-01');
+    const end = moment('2021-09-01');
+    const result = resolveDateRange('custom', firstTxDate, start, end);
+    expect(result.startDate.isSame(start, 'day')).toBeTruthy();
+    expect(result.endDate.isSame(end, 'day')).toBeTruthy();
+    // ~6 months spans fewer than 200 days, so a weekly resolution is chosen.
+    expect(result.interval).toEqual('week');
+  });
+  test('custom range falls back to the full window without explicit dates', () => {
+    const result = resolveDateRange('custom', firstTxDate);
+    expect(result.startDate.isSame(firstTxDate, 'day')).toBeTruthy();
+    expect(result.endDate.isSame(moment(), 'day')).toBeTruthy();
   });
 });
 
@@ -156,35 +169,37 @@ describe('makeBucketNames()', () => {
 
 describe('availableDateRangeOptions()', () => {
   const now = moment('2021-12-15');
-  test('recent data only offers all time', () => {
+  // "All Time" and "Custom" are always offered; the relative "Last ..." ranges
+  // appear only once there is data old enough to fill them.
+  test('recent data only offers all time and custom', () => {
     const result = availableDateRangeOptions(moment('2021-12-13'), now);
-    expect(result.map(({ id }) => id)).toEqual(['all']);
+    expect(result.map(({ id }) => id)).toEqual(['all', 'custom']);
   });
-  test('a couple weeks of data offers last week and all time', () => {
+  test('less than a month of data offers all time and custom', () => {
     const result = availableDateRangeOptions(moment('2021-12-01'), now);
-    expect(result.map(({ id }) => id)).toEqual(['week', 'all']);
+    expect(result.map(({ id }) => id)).toEqual(['all', 'custom']);
   });
   test('a few months of data offers up through last month', () => {
     const result = availableDateRangeOptions(moment('2021-08-01'), now);
-    expect(result.map(({ id }) => id)).toEqual(['week', 'month', 'all']);
+    expect(result.map(({ id }) => id)).toEqual(['month', 'all', 'custom']);
   });
   test('most of a year of data adds last six months', () => {
     const result = availableDateRangeOptions(moment('2021-02-01'), now);
     expect(result.map(({ id }) => id)).toEqual([
-      'week',
       'month',
       '6months',
       'all',
+      'custom',
     ]);
   });
   test('years of data offers every range', () => {
     const result = availableDateRangeOptions(moment('2018-01-01'), now);
     expect(result.map(({ id }) => id)).toEqual([
-      'week',
       'month',
       '6months',
       'year',
       'all',
+      'custom',
     ]);
   });
 });

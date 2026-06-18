@@ -109,13 +109,37 @@ const useDateRange = (
   startDate: Moment;
   endDate: Moment;
   interval: Interval;
+  customStart: Moment;
+  customEnd: Moment;
+  setCustomStart: (date: Moment) => void;
+  setCustomEnd: (date: Moment) => void;
 } => {
   const [dateRange, setDateRange] = React.useState<DateRange>(initialRange);
-  const { startDate, endDate, interval } = React.useMemo(
-    () => resolveDateRange(dateRange, txCache.firstDate),
-    [dateRange, txCache],
+  // Endpoints for the 'custom' range. They default to the full data window so
+  // selecting "Custom" initially shows everything, after which the user narrows
+  // it down. They are ignored unless dateRange is 'custom'.
+  const [customStart, setCustomStart] = React.useState<Moment>(() =>
+    txCache.firstDate.clone(),
   );
-  return { dateRange, setDateRange, startDate, endDate, interval };
+  const [customEnd, setCustomEnd] = React.useState<Moment>(() =>
+    window.moment(),
+  );
+  const { startDate, endDate, interval } = React.useMemo(
+    () =>
+      resolveDateRange(dateRange, txCache.firstDate, customStart, customEnd),
+    [dateRange, txCache, customStart, customEnd],
+  );
+  return {
+    dateRange,
+    setDateRange,
+    startDate,
+    endDate,
+    interval,
+    customStart,
+    customEnd,
+    setCustomStart,
+    setCustomEnd,
+  };
 };
 
 const MobileStyles = styled.div`
@@ -134,8 +158,17 @@ const MobileDashboard: React.FC<{
   updater: LedgerModifier;
 }> = (props): JSX.Element => {
   const dailyAccountBalanceMap = useDailyAccountBalanceMap(props.txCache);
-  const { dateRange, setDateRange, startDate, endDate, interval } =
-    useDateRange(props.txCache, 'month');
+  const {
+    dateRange,
+    setDateRange,
+    startDate,
+    endDate,
+    interval,
+    customStart,
+    customEnd,
+    setCustomStart,
+    setCustomEnd,
+  } = useDateRange(props.txCache, 'month');
   const [selectedAccounts, setSelectedAccounts] = React.useState<string[]>([]);
   const [accountsExpanded, setAccountsExpanded] = React.useState(false);
   const [selectedTag, setSelectedTag] = React.useState<string | null>(null);
@@ -172,6 +205,10 @@ const MobileDashboard: React.FC<{
         range={dateRange}
         setRange={setDateRange}
         firstDate={props.txCache.firstDate}
+        customStart={customStart}
+        customEnd={customEnd}
+        setCustomStart={setCustomStart}
+        setCustomEnd={setCustomEnd}
       />
 
       <button
@@ -253,8 +290,17 @@ const DesktopDashboard: React.FC<{
   updater: LedgerModifier;
 }> = (props): JSX.Element => {
   const dailyAccountBalanceMap = useDailyAccountBalanceMap(props.txCache);
-  const { dateRange, setDateRange, startDate, endDate, interval } =
-    useDateRange(props.txCache, 'month');
+  const {
+    dateRange,
+    setDateRange,
+    startDate,
+    endDate,
+    interval,
+    customStart,
+    customEnd,
+    setCustomStart,
+    setCustomEnd,
+  } = useDateRange(props.txCache, 'month');
   const [selectedAccounts, setSelectedAccounts] = React.useState<string[]>([]);
   const [selectedTag, setSelectedTag] = React.useState<string | null>(null);
   const toggleTag = (tag: string): void =>
@@ -291,6 +337,10 @@ const DesktopDashboard: React.FC<{
           range={dateRange}
           setRange={setDateRange}
           firstDate={props.txCache.firstDate}
+          customStart={customStart}
+          customEnd={customEnd}
+          setCustomStart={setCustomStart}
+          setCustomEnd={setCustomEnd}
         />
         {props.tutorialIndex !== -1 ? (
           <Tutorial

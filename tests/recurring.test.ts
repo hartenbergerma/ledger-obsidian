@@ -115,6 +115,30 @@ describe('schedule math', () => {
     expect(nextNominalDate(weekly)).toBe('2026-07-06');
   });
 
+  test('nextNominalDate resumes on the weekly anchor after an off-schedule date', () => {
+    // "Every week on Thursday" whose next date was moved to a Monday: the
+    // following occurrence returns to Thursday rather than staying on Monday.
+    const weekly: RecurringTransaction = {
+      ...monthlyRent,
+      unit: 'week',
+      intervalCount: 1,
+      weekday: 4, // Thursday
+      dayOfMonth: undefined,
+      nextDate: '2026-06-22', // a Monday
+    };
+    expect(nextNominalDate(weekly)).toBe('2026-06-25');
+  });
+
+  test('nextNominalDate resumes on the monthly anchor after an off-schedule date', () => {
+    // Monthly on the 15th whose next date was moved earlier, to the 3rd: the
+    // following occurrence returns to the 15th of the same month.
+    const monthly: RecurringTransaction = {
+      ...monthlyRent,
+      nextDate: '2026-07-03',
+    };
+    expect(nextNominalDate(monthly)).toBe('2026-07-15');
+  });
+
   test('advanceSchedule returns a copy with the next date', () => {
     const advanced = advanceSchedule(monthlyRent);
     expect(advanced.nextDate).toBe('2026-08-15');
