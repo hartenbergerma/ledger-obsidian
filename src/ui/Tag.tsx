@@ -1,4 +1,9 @@
-import { sanitizeTag } from '../transaction-utils';
+import {
+  isRecurringTag,
+  RECURRING_TAG_FILTER,
+  sanitizeTag,
+} from '../transaction-utils';
+import { RecurringPill } from './Recurring';
 import React from 'react';
 import styled from 'styled-components';
 
@@ -241,14 +246,18 @@ export const TagSelect: React.FC<{
   }
 
   const normalizedQuery = sanitizeTag(query);
-  const suggestions = allTags.filter(
+  // The internal recurring marker tags are not offered as selectable tags.
+  const selectableTags = allTags.filter((t) => !isRecurringTag(t));
+  const suggestions = selectableTags.filter(
     (t) =>
       normalizedQuery === '' ||
       t.toLowerCase().includes(normalizedQuery.toLowerCase()),
   );
   const canCreate =
     normalizedQuery !== '' &&
-    !allTags.some((t) => t.toLowerCase() === normalizedQuery.toLowerCase());
+    !selectableTags.some(
+      (t) => t.toLowerCase() === normalizedQuery.toLowerCase(),
+    );
 
   if (!open) {
     return (
@@ -316,7 +325,7 @@ export const TagSelect: React.FC<{
           ) : null}
           {suggestions.length === 0 && !canCreate ? (
             <div className="ledger-tag-empty">
-              {allTags.length === 0
+              {selectableTags.length === 0
                 ? 'No tags yet — type to create one'
                 : 'No matching tags'}
             </div>
@@ -352,13 +361,18 @@ export const TagFilter: React.FC<{
   selectedTag: string | null;
   onToggleTag: (tag: string) => void;
 }> = ({ allTags, selectedTag, onToggleTag }): JSX.Element | null => {
-  if (allTags.length === 0) {
+  // The recurring marker tags are not shown as ordinary tag pills; instead a
+  // single recurring icon filters down to all recurring transactions.
+  const normalTags = allTags.filter((t) => !isRecurringTag(t));
+  const hasRecurring = allTags.some(isRecurringTag);
+
+  if (normalTags.length === 0 && !hasRecurring) {
     return null;
   }
   return (
     <TagFilterStyle className="ledger-tag-filter">
       <span className="ledger-tag-filter-label">Filter by tag:</span>
-      {allTags.map((t) => (
+      {normalTags.map((t) => (
         <TagPill
           key={t}
           tag={t}
@@ -366,6 +380,13 @@ export const TagFilter: React.FC<{
           onClick={() => onToggleTag(t)}
         />
       ))}
+      {hasRecurring ? (
+        <RecurringPill
+          title="Show recurring transactions"
+          selected={selectedTag === RECURRING_TAG_FILTER}
+          onClick={() => onToggleTag(RECURRING_TAG_FILTER)}
+        />
+      ) : null}
     </TagFilterStyle>
   );
 };

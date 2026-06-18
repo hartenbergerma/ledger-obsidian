@@ -1,4 +1,8 @@
-import { EnhancedExpenseLine, EnhancedTransaction } from './parser';
+import {
+  Commentline,
+  EnhancedExpenseLine,
+  EnhancedTransaction,
+} from './parser';
 import { some } from 'lodash';
 import { Moment } from 'moment';
 
@@ -14,14 +18,17 @@ export const emptyTransaction: EnhancedTransaction = {
 };
 
 /**
- * formatTransaction converts a transaction object into the string
- * representation which can be stored in the Ledger file.
+ * formatExpenseLines converts the expense (posting) lines of a transaction into
+ * their string representation. The final line with an account is written
+ * without an amount so that Ledger infers it, matching how the lines are
+ * parsed. Comment-only lines are preserved. This is shared by both regular
+ * transactions and recurring transaction definitions.
  */
-export const formatTransaction = (
-  tx: EnhancedTransaction,
+export const formatExpenseLines = (
+  lines: (EnhancedExpenseLine | Commentline)[],
   currencySymbol: string,
-): string => {
-  const joinedLines = tx.value.expenselines
+): string =>
+  lines
     .map((line, i) => {
       if (!('account' in line)) {
         return `    ; ${line.comment}`;
@@ -30,13 +37,23 @@ export const formatTransaction = (
       const currency = line.currency ? line.currency : currencySymbol;
       const symb = line.reconcile ? line.reconcile : ' ';
       const comment = line.comment ? `    ; ${line.comment}` : '';
-      return i !== tx.value.expenselines.length - 1
+      return i !== lines.length - 1
         ? `  ${symb} ${line.account}    ${currency}${line.amount.toFixed(
             2,
           )}${comment}`
         : `  ${symb} ${line.account}${comment}`;
     })
     .join('\n');
+
+/**
+ * formatTransaction converts a transaction object into the string
+ * representation which can be stored in the Ledger file.
+ */
+export const formatTransaction = (
+  tx: EnhancedTransaction,
+  currencySymbol: string,
+): string => {
+  const joinedLines = formatExpenseLines(tx.value.expenselines, currencySymbol);
   // The transaction-level comment holds any memo text and the transaction's tag
   // (e.g. `; lunch #work`). It is written on the same line as the payee.
   const txComment = tx.value.comment ? `    ; ${tx.value.comment}` : '';
@@ -211,6 +228,55 @@ export const formatComment = (
  */
 export const getTransactionTags = (tx: EnhancedTransaction): string[] =>
   getTagsFromComment(tx.value.comment);
+
+/**
+ * Recurring transactions generated from a schedule are marked with a tag of the
+ * form `recurring-<scheduleId>` stored alongside the transaction's other tags
+ * (e.g. `lunch #work #recurring-ab12cd`). Keeping the marker in the normal tag
+ * stream — rather than a separate comment — lets it round-trip with the memo and
+ * other tags while remaining recognizable.
+ */
+export const RECURRING_TAG_PREFIX = 'recurring-';
+
+export const recurringTagFor = (scheduleId: string): string =>
+  `${RECURRING_TAG_PREFIX}${scheduleId}`;
+
+export const isRecurringTag = (tag: string): boolean =>
+  tag === 'recurring' || tag.startsWith(RECURRING_TAG_PREFIX);
+
+/**
+ * RECURRING_TAG_FILTER is the sentinel "selected tag" value used to filter the
+ * transaction list down to recurring instances. The leading space means it can
+ * never collide with a real tag, which is a whitespace-delimited token.
+ */
+export const RECURRING_TAG_FILTER = ' recurring';
+
+/**
+ * getVisibleTransactionTags returns a transaction's tags excluding the internal
+ * recurring marker tag, for display next to the payee.
+ */
+export const getVisibleTransactionTags = (tx: EnhancedTransaction): string[] =>
+  getTransactionTags(tx).filter((tag) => !isRecurringTag(tag));
+
+/**
+ * isRecurringInstance returns true when a transaction was generated from a
+ * recurring schedule (it carries a recurring marker tag).
+ */
+export const isRecurringInstance = (tx: EnhancedTransaction): boolean =>
+  getTransactionTags(tx).some(isRecurringTag);
+
+/**
+ * recurringInstanceId returns the schedule id a transaction was generated from,
+ * or undefined when it is not a recurring instance.
+ */
+export const recurringInstanceId = (
+  tx: EnhancedTransaction,
+): string | undefined => {
+  const tag = getTransactionTags(tx).find(isRecurringTag);
+  return tag && tag.startsWith(RECURRING_TAG_PREFIX)
+    ? tag.slice(RECURRING_TAG_PREFIX.length)
+    : undefined;
+};
 
 /**
  * getTransactionTag returns the single (first) tag applied to a transaction, or

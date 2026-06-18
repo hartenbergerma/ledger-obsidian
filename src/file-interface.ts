@@ -1,7 +1,22 @@
 import LedgerPlugin from './main';
-import { AddExpenseModal, ConfirmModal, Operation } from './modals';
+import {
+  AddExpenseModal,
+  ConfirmModal,
+  Operation,
+  RecurringAcceptModal,
+} from './modals';
 import { EnhancedTransaction, parse, TransactionCache } from './parser';
+import {
+  advanceSchedule,
+  effectiveDueDate,
+  formatRecurringTransaction,
+  insertRecurringTransaction,
+  materializeTransaction,
+  nextNominalDate,
+  RecurringTransaction,
+} from './recurring';
 import type { ISettings } from './settings';
+import { formatTransaction, getTotal } from './transaction-utils';
 import type { MetadataCache, TFile, Vault } from 'obsidian';
 
 export class LedgerModifier {
@@ -20,8 +35,29 @@ export class LedgerModifier {
   public openExpenseModal(
     operation: Operation,
     initialState?: EnhancedTransaction,
+    initialRecurring?: RecurringTransaction,
   ): void {
-    new AddExpenseModal(this.plugin, this, operation, initialState).open();
+    new AddExpenseModal(
+      this.plugin,
+      this,
+      operation,
+      initialState,
+      initialRecurring,
+    ).open();
+  }
+
+  /**
+   * openRecurringEditModal opens the transaction form pre-filled to edit an
+   * existing recurring transaction.
+   */
+  public openRecurringEditModal(recurring: RecurringTransaction): void {
+    new AddExpenseModal(
+      this.plugin,
+      this,
+      'modify',
+      undefined,
+      recurring,
+    ).open();
   }
 
   public async updateTransaction(
@@ -72,6 +108,157 @@ export class LedgerModifier {
     const fileContents = await vault.read(this.ledgerFile);
     const newFileContents = `${fileContents}\n${newExpense}`;
     await vault.modify(this.ledgerFile, newFileContents);
+  }
+
+  /**
+   * saveRecurring writes a recurring transaction. A transaction with a `block`
+   * (an existing one being edited) is replaced in place; a new one is inserted
+   * into the recurring-transactions section.
+   */
+  public async saveRecurring(rt: RecurringTransaction): Promise<void> {
+    const text = formatRecurringTransaction(
+      rt,
+      this.plugin.settings.currencySymbol,
+    );
+    if (rt.block) {
+      await this.replaceBlock(rt.block, text);
+      return;
+    }
+    const vault = this.plugin.app.vault;
+    const fileContents = await vault.read(this.ledgerFile);
+    await vault.modify(
+      this.ledgerFile,
+      insertRecurringTransaction(fileContents, text),
+    );
+  }
+
+  public async deleteRecurring(rt: RecurringTransaction): Promise<void> {
+    if (rt.block) {
+      await this.removeBlock(rt.block);
+    }
+  }
+
+  /**
+   * skipRecurring advances a recurring transaction to its next occurrence
+   * without creating a transaction, updating it in place.
+   */
+  public async skipRecurring(rt: RecurringTransaction): Promise<void> {
+    await this.saveRecurring(advanceSchedule(rt));
+  }
+
+  /**
+   * acceptRecurring adds an occurrence of a recurring transaction to the
+   * transactions on the provided date, then advances the schedule to its next
+   * regular occurrence. The chosen date only affects the created transaction —
+   * the schedule's own timing is always advanced based on the schedule, even
+   * when the occurrence is added before it is due.
+   */
+  public async acceptRecurring(
+    rt: RecurringTransaction,
+    dateISO: string,
+  ): Promise<void> {
+    const tx = materializeTransaction(rt, dateISO);
+    const txStr = formatTransaction(tx, this.plugin.settings.currencySymbol);
+    await this.appendLedger(txStr);
+    await this.skipRecurring(rt);
+  }
+
+  /**
+   * createRecurring saves a new schedule and immediately adds a first
+   * transaction for the provided date. The schedule's next occurrence is set to
+   * the next regular date after the one just added.
+   */
+  public async createRecurring(
+    rt: RecurringTransaction,
+    firstDateISO: string,
+  ): Promise<void> {
+    const tx = materializeTransaction(rt, firstDateISO);
+    const txStr = formatTransaction(tx, this.plugin.settings.currencySymbol);
+    await this.appendLedger(txStr);
+
+    // The schedule's nextDate was computed as the first occurrence on or after
+    // firstDateISO. If that is the date we just added, advance one more so the
+    // same occurrence is not offered again.
+    const nextDate =
+      rt.nextDate === firstDateISO ? nextNominalDate(rt) : rt.nextDate;
+    await this.saveRecurring({ ...rt, nextDate });
+  }
+
+  /**
+   * promptAcceptRecurring opens a dialog to add (with an adjustable date) or
+   * skip an occurrence of a recurring transaction.
+   */
+  public promptAcceptRecurring(rt: RecurringTransaction): void {
+    const dueDate = effectiveDueDate(rt, this.plugin.settings.holidayCountry);
+    const total = getTotal(
+      materializeTransaction(rt, dueDate),
+      this.plugin.settings.currencySymbol,
+    );
+    new RecurringAcceptModal(
+      this.plugin.app,
+      rt.payee,
+      total,
+      dueDate,
+      (dateISO: string) => {
+        this.acceptRecurring(rt, dateISO);
+      },
+      () => {
+        this.skipRecurring(rt);
+      },
+    ).open();
+  }
+
+  /**
+   * promptDeleteRecurring confirms before deleting a recurring schedule.
+   */
+  public promptDeleteRecurring(rt: RecurringTransaction): void {
+    new ConfirmModal(
+      this.plugin.app,
+      'Delete recurring transaction',
+      `Are you sure you want to delete the recurring transaction "${rt.payee}"? This cannot be undone.`,
+      'Delete',
+      () => {
+        this.deleteRecurring(rt);
+      },
+    ).open();
+  }
+
+  /**
+   * replaceBlock replaces the lines of an existing block in the file with the
+   * provided text.
+   */
+  private async replaceBlock(
+    block: { firstLine: number; lastLine: number },
+    newText: string,
+  ): Promise<void> {
+    const vault = this.plugin.app.vault;
+    const fileContents = await vault.read(this.ledgerFile);
+    const lines = fileContents.split('\n');
+    const newLines = [
+      ...lines.slice(0, block.firstLine),
+      ...newText.split('\n'),
+      ...lines.slice(block.lastLine + 1),
+    ].join('\n');
+    await vault.modify(this.ledgerFile, newLines);
+  }
+
+  /**
+   * removeBlock deletes the lines of an existing block from the file, including
+   * a single trailing blank line if present to avoid leaving a double blank.
+   */
+  private async removeBlock(block: {
+    firstLine: number;
+    lastLine: number;
+  }): Promise<void> {
+    const vault = this.plugin.app.vault;
+    const fileContents = await vault.read(this.ledgerFile);
+    const lines = fileContents.split('\n');
+    let length = block.lastLine - block.firstLine + 1;
+    if (lines[block.firstLine + length] === '') {
+      length++;
+    }
+    lines.splice(block.firstLine, length);
+    await vault.modify(this.ledgerFile, lines.join('\n'));
   }
 }
 
