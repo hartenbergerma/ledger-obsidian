@@ -47,24 +47,37 @@ const monthlyRent: RecurringTransaction = {
 };
 
 describe('period expressions', () => {
-  test('round-trips a monthly expression', () => {
-    expect(formatPeriodExpression(monthlyRent)).toBe('every 1 month on the 15');
+  test('formats monthly schedules as hledger period expressions', () => {
+    expect(formatPeriodExpression(monthlyRent)).toBe('every 15th day of month');
+    expect(formatPeriodExpression({ ...monthlyRent, dayOfMonth: 1 })).toBe(
+      'every 1st day of month',
+    );
+    expect(formatPeriodExpression({ ...monthlyRent, intervalCount: 2 })).toBe(
+      'every 2 months',
+    );
+  });
+
+  test('formats weekly schedules as hledger period expressions', () => {
+    const weekly: RecurringTransaction = {
+      ...monthlyRent,
+      unit: 'week',
+      weekday: 1,
+      dayOfMonth: undefined,
+    };
+    expect(formatPeriodExpression({ ...weekly, intervalCount: 1 })).toBe(
+      'every monday',
+    );
+    expect(formatPeriodExpression({ ...weekly, intervalCount: 2 })).toBe(
+      'every 2 weeks',
+    );
+  });
+
+  test('still parses the legacy period expression syntax', () => {
     expect(parsePeriodExpression('every 1 month on the 15')).toEqual({
       intervalCount: 1,
       unit: 'month',
       dayOfMonth: 15,
     });
-  });
-
-  test('round-trips a weekly expression', () => {
-    const weekly: RecurringTransaction = {
-      ...monthlyRent,
-      unit: 'week',
-      intervalCount: 2,
-      weekday: 1,
-      dayOfMonth: undefined,
-    };
-    expect(formatPeriodExpression(weekly)).toBe('every 2 weeks on monday');
     expect(parsePeriodExpression('every 2 weeks on monday')).toEqual({
       intervalCount: 2,
       unit: 'week',
@@ -181,15 +194,19 @@ describe('materializeTransaction', () => {
     // The caller passes the date; here the working-day-adjusted due date.
     const tx = materializeTransaction(rt, effectiveDueDate(rt, ''));
     expect(tx.value.payee).toBe('Rent');
-    expect(tx.value.date).toBe('2026/07/06'); // adjusted to Monday, slashes
+    expect(tx.value.date).toBe('2026-07-06'); // adjusted to Monday
     // The recurring marker is stored as a tag alongside the user's tags.
     expect(tx.value.comment).toBe('monthly rent #housing #recurring-abc123');
     expect(isRecurringInstance(tx)).toBe(true);
   });
 
-  test('uses exactly the provided date without adjustment', () => {
-    const tx = materializeTransaction(monthlyRent, '2026-09-15');
-    expect(tx.value.date).toBe('2026/09/15');
+  test('uses exactly the provided date without reformatting', () => {
+    expect(materializeTransaction(monthlyRent, '2026-09-15').value.date).toBe(
+      '2026-09-15',
+    );
+    expect(materializeTransaction(monthlyRent, '2026/09/15').value.date).toBe(
+      '2026/09/15',
+    );
   });
 });
 
@@ -263,6 +280,47 @@ describe('parsing recurring transactions from a file', () => {
     const cache = parse(file, settings);
     expect(cache.recurringTransactions[0].comment).toBeUndefined();
     expect(cache.recurringTransactions[0].payee).toBe('Rent');
+  });
+
+  test('emits a valid hledger period expression and round-trips via metadata', () => {
+    // "every 2 weeks on thursday" has no single hledger period expression, so
+    // the period expression only carries the interval while the weekday survives
+    // in the metadata comment and is recovered on parse.
+    const weekly: RecurringTransaction = {
+      ...monthlyRent,
+      unit: 'week',
+      intervalCount: 2,
+      weekday: 4,
+      dayOfMonth: undefined,
+      nextDate: '2026-07-02',
+    };
+    const file = formatRecurringTransaction(weekly, '$');
+    expect(file).toContain('~ every 2 weeks ');
+
+    const cache = parse(file, settings);
+    expect(cache.parsingErrors).toEqual([]);
+    const rt = cache.recurringTransactions[0];
+    expect(rt.unit).toBe('week');
+    expect(rt.intervalCount).toBe(2);
+    expect(rt.weekday).toBe(4);
+    expect(rt.nextDate).toBe('2026-07-02');
+  });
+
+  test('parses legacy recurring blocks that predate the schedule metadata', () => {
+    // Older files stored the schedule only in the (non-hledger) period
+    // expression and had no int/unit/dom/dow metadata.
+    const file = [
+      '~ every 1 month on the 15    Rent    ; recur:old123 next:2026-07-15 workday:no',
+      '  Expenses:Rent    $1500.00',
+      '  Assets:Checking',
+    ].join('\n');
+    const cache = parse(file, settings);
+    expect(cache.parsingErrors).toEqual([]);
+    const rt = cache.recurringTransactions[0];
+    expect(rt.unit).toBe('month');
+    expect(rt.dayOfMonth).toBe(15);
+    expect(rt.intervalCount).toBe(1);
+    expect(rt.nextDate).toBe('2026-07-15');
   });
 });
 

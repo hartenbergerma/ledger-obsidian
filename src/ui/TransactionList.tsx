@@ -13,6 +13,7 @@ import {
   filterTransactions,
   getTotal,
   getVisibleTransactionTags,
+  parseLedgerDate,
   RECURRING_TAG_FILTER,
 } from '../transaction-utils';
 import { DeleteIcon, EditIcon } from './ActionIcons';
@@ -21,7 +22,14 @@ import { RecurringPill } from './Recurring';
 import { TagFilter, TagPill } from './Tag';
 import { Moment } from 'moment';
 import React from 'react';
-import { Column, useFilters, useSortBy, useTable } from 'react-table';
+import {
+  Column,
+  Row,
+  SortByFn,
+  useFilters,
+  useSortBy,
+  useTable,
+} from 'react-table';
 import styled from 'styled-components';
 
 /**
@@ -189,10 +197,12 @@ export const MobileTransactionList: React.FC<{
       props.selectedTag,
     );
 
-    // Sort so most recent transactions come first
+    // Sort so most recent transactions come first. Transactions on the same
+    // date keep their order in the file (a stable sort over the file-ordered
+    // input), regardless of whether their dates use dashes or slashes.
     return [...filteredTransactions].sort((a, b) => {
-      const aDate = window.moment(a.value.date);
-      const bDate = window.moment(b.value.date);
+      const aDate = parseLedgerDate(a.value.date);
+      const bDate = parseLedgerDate(b.value.date);
       if (aDate.isSame(bDate)) {
         return 0;
       }
@@ -412,10 +422,12 @@ const buildTableRows = (
     };
   });
 
-  // Sort so most recent transactions come first
+  // Sort so most recent transactions come first. Transactions on the same date
+  // keep their order in the file (a stable sort over the file-ordered input),
+  // regardless of whether their dates use dashes or slashes.
   tableRows.sort((a, b): number => {
-    const aDate = window.moment(a.date);
-    const bDate = window.moment(b.date);
+    const aDate = parseLedgerDate(a.date);
+    const bDate = parseLedgerDate(b.date);
     if (aDate.isSame(bDate)) {
       return 0;
     }
@@ -568,6 +580,19 @@ const TransactionTable: React.FC<{
       {
         Header: 'Date',
         accessor: 'date',
+        // Sort by the actual date value so dash (YYYY-MM-DD) and slash
+        // (YYYY/MM/DD) dates for the same day compare equal, rather than by the
+        // raw string (which would order all slash dates before/after all dash
+        // dates and float recurring instances out of file order). Equal dates
+        // fall through to the orderByFn tie-break below, preserving file order.
+        sortType: (rowA: any, rowB: any, columnId: string): number => {
+          const a = parseLedgerDate(rowA.values[columnId]);
+          const b = parseLedgerDate(rowB.values[columnId]);
+          if (a.isSame(b)) {
+            return 0;
+          }
+          return a.isBefore(b) ? -1 : 1;
+        },
       },
       {
         Header: 'Payee',
@@ -597,7 +622,37 @@ const TransactionTable: React.FC<{
     ],
     [onSelectTag],
   );
-  const tableInstance = useTable({ columns, data }, useFilters, useSortBy);
+  // Break ties on the original row order (which buildTableRows produced in file
+  // order for same-date rows) regardless of sort direction. react-table's
+  // default reverses ties for descending sorts, which would float the most
+  // recently appended entries (e.g. recurring instances) to the top of their
+  // day; this keeps same-date transactions in file order in either direction.
+  const orderByFn = React.useCallback(
+    (rows: Row<any>[], sortFns: SortByFn<any>[], dirs: boolean[]): Row<any>[] =>
+      [...rows].sort((rowA, rowB) => {
+        for (let i = 0; i < sortFns.length; i++) {
+          // react-table invokes these wrapped sort functions with just the two
+          // rows (the column id and direction are already baked in).
+          const result = (sortFns[i] as (a: Row<any>, b: Row<any>) => number)(
+            rowA,
+            rowB,
+          );
+          if (result !== 0) {
+            // A direction of `false` means descending, in which case react-table
+            // negates the comparator result.
+            return dirs[i] ? result : -result;
+          }
+        }
+        return rowA.index - rowB.index;
+      }),
+    [],
+  );
+
+  const tableInstance = useTable(
+    { columns, data, orderByFn },
+    useFilters,
+    useSortBy,
+  );
 
   const { getTableProps, getTableBodyProps, headerGroups, rows, prepareRow } =
     tableInstance;

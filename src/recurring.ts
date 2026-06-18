@@ -24,9 +24,10 @@ import { Grammar, Parser } from 'nearley';
  * Ledger's periodic-transaction syntax (a `~` block) with the schedule state
  * held in a trailing metadata comment.
  *
- * Example serialized form:
+ * Example serialized form (the period expression is hledger-compatible; the
+ * full schedule lives in the metadata comment so it round-trips exactly):
  *
- *   ~ every 1 month on the 15    Rent    ; recur:a1b2c3 next:2026-07-15 workday:yes
+ *   ~ every 15th day of month    Rent    ; recur:a1b2c3 next:2026-07-15 int:1 unit:month dom:15 workday:yes
  *       Expenses:Rent    $1500.00
  *       Assets:Checking
  */
@@ -87,20 +88,33 @@ export const makeRecurId = (): string =>
 
 // --- Period expression -----------------------------------------------------
 
+const ordinal = (n: number): string => {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+};
+
 /**
- * formatPeriodExpression renders the schedule of a recurring transaction as a
- * human-readable, Ledger-style period expression, e.g. `every 2 weeks on monday`
- * or `every 1 month on the 15`.
+ * formatPeriodExpression renders the schedule of a recurring transaction as an
+ * hledger-compatible period expression for the `~` line, e.g. `every monday`,
+ * `every 2 weeks`, `every 15th day of month`, or `every 2 months`.
+ *
+ * hledger has no period expression that combines a multi-unit interval with a
+ * weekday or day-of-month (there is no "every 2 weeks on monday"), so for an
+ * interval greater than one only the interval is expressed here. The complete
+ * schedule is always preserved in the transaction's metadata comment (see
+ * formatMetadata), which is what the plugin reads back; the period expression
+ * exists so the file remains valid hledger (e.g. passes `hledger check -s`).
  */
 export const formatPeriodExpression = (rt: RecurringTransaction): string => {
   if (rt.unit === 'week') {
-    const unit = rt.intervalCount === 1 ? 'week' : 'weeks';
-    return `every ${rt.intervalCount} ${unit} on ${
-      weekdayNames[rt.weekday ?? 1]
-    }`;
+    return rt.intervalCount === 1
+      ? `every ${weekdayNames[rt.weekday ?? 1]}`
+      : `every ${rt.intervalCount} weeks`;
   }
-  const unit = rt.intervalCount === 1 ? 'month' : 'months';
-  return `every ${rt.intervalCount} ${unit} on the ${rt.dayOfMonth ?? 1}`;
+  return rt.intervalCount === 1
+    ? `every ${ordinal(rt.dayOfMonth ?? 1)} day of month`
+    : `every ${rt.intervalCount} months`;
 };
 
 interface ParsedPeriod {
@@ -255,7 +269,7 @@ export const advanceSchedule = (
  */
 export const materializeTransaction = (
   rt: RecurringTransaction,
-  dateISO: string,
+  date: string,
 ): EnhancedTransaction => {
   const tags = getTagsFromComment(rt.comment);
   const memo = getMemoFromComment(rt.comment);
@@ -266,8 +280,10 @@ export const materializeTransaction = (
     blockLine: -1,
     block: { firstLine: -1, lastLine: -1, block: '' },
     value: {
-      // Store the date using the same slash format the form writes.
-      date: dateISO.replace(/-/g, '/'),
+      // The date is used verbatim; callers writing to the file pass it in the
+      // same format the rest of the file uses (see preferredDateSeparator) so
+      // generated transactions match the surrounding ones.
+      date,
       payee: rt.payee,
       comment: formatComment(memo, allTags),
       expenselines: rt.expenselines,
@@ -282,8 +298,15 @@ export { isRecurringInstance, recurringInstanceId } from './transaction-utils';
 // --- Serialization ---------------------------------------------------------
 
 const formatMetadata = (rt: RecurringTransaction): string => {
+  // The full schedule is stored here (not just in the period expression) so it
+  // round-trips exactly even when hledger's period expression cannot represent
+  // it, e.g. "every 2 weeks on monday".
+  const schedule =
+    rt.unit === 'week'
+      ? `int:${rt.intervalCount} unit:week dow:${rt.weekday ?? 1}`
+      : `int:${rt.intervalCount} unit:month dom:${rt.dayOfMonth ?? 1}`;
   const machine =
-    `recur:${rt.id} next:${rt.nextDate} ` +
+    `recur:${rt.id} next:${rt.nextDate} ${schedule} ` +
     `workday:${rt.adjustToWorkday ? 'yes' : 'no'}` +
     (rt.endDate ? ` end:${rt.endDate}` : '');
   return rt.comment ? `${rt.comment} ;; ${machine}` : machine;
@@ -327,6 +350,10 @@ interface ParsedMetadata {
   workday: boolean;
   end?: string;
   comment?: string;
+  intervalCount?: number;
+  unit?: 'week' | 'month';
+  weekday?: number;
+  dayOfMonth?: number;
 }
 
 const parseMetadata = (raw: string): ParsedMetadata => {
@@ -341,7 +368,24 @@ const parseMetadata = (raw: string): ParsedMetadata => {
   const next = /(?:^|\s)next:(\S+)/.exec(machine)?.[1];
   const end = /(?:^|\s)end:(\S+)/.exec(machine)?.[1];
   const workday = /(?:^|\s)workday:yes/.test(machine);
-  return { id, next, end, workday, comment };
+  const intervalRaw = /(?:^|\s)int:(\d+)/.exec(machine)?.[1];
+  const unit = /(?:^|\s)unit:(week|month)/.exec(machine)?.[1] as
+    | 'week'
+    | 'month'
+    | undefined;
+  const dowRaw = /(?:^|\s)dow:(\d+)/.exec(machine)?.[1];
+  const domRaw = /(?:^|\s)dom:(\d+)/.exec(machine)?.[1];
+  return {
+    id,
+    next,
+    end,
+    workday,
+    comment,
+    intervalCount: intervalRaw ? parseInt(intervalRaw, 10) : undefined,
+    unit,
+    weekday: dowRaw ? parseInt(dowRaw, 10) : undefined,
+    dayOfMonth: domRaw ? parseInt(domRaw, 10) : undefined,
+  };
 };
 
 /**
@@ -419,13 +463,28 @@ const parseRecurringBlock = (
   const periodExpr = parts[0].trim();
   const payee = parts.slice(1).join('  ').trim();
 
-  const period = parsePeriodExpression(periodExpr);
-  if (!period) {
-    throw new Error(`Unrecognized recurring period: "${periodExpr}"`);
-  }
   const meta = parseMetadata(metaRaw);
   if (!meta.next) {
     throw new Error('Recurring transaction is missing its next date');
+  }
+
+  // The schedule is taken from the metadata comment when present (the current
+  // format). Older blocks stored it only in the period expression, so fall back
+  // to parsing that for backwards compatibility.
+  let period: ParsedPeriod;
+  if (meta.unit) {
+    period = {
+      intervalCount: meta.intervalCount ?? 1,
+      unit: meta.unit,
+      weekday: meta.unit === 'week' ? (meta.weekday ?? 1) : undefined,
+      dayOfMonth: meta.unit === 'month' ? (meta.dayOfMonth ?? 1) : undefined,
+    };
+  } else {
+    const parsed = parsePeriodExpression(periodExpr);
+    if (!parsed) {
+      throw new Error(`Unrecognized recurring period: "${periodExpr}"`);
+    }
+    period = parsed;
   }
 
   const expenselines = parsePostings(blockLines.slice(1), aliases);

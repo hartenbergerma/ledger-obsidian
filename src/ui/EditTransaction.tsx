@@ -19,6 +19,8 @@ import {
   getTransactionTags,
   isRecurringInstance,
   isRecurringTag,
+  preferredDateSeparator,
+  toLedgerDate,
 } from '../transaction-utils';
 import { CurrencyInputFormik } from './CurrencyInput';
 import {
@@ -731,9 +733,32 @@ export const EditTransaction: React.FC<{
             lineToEnhancedExpenseLine(line),
           );
 
-          // When the recurrence toggle is on, save a recurring transaction. For
-          // a brand new schedule a first transaction is also added immediately
-          // for the date entered on the first page.
+          // Build the regular-transaction string from the form values. The date
+          // is written using the separator the rest of the file uses so the
+          // entry matches the surrounding transactions. This is not fully valid
+          // (it has no real block) but is complete enough to format to a string.
+          // It is used both when saving a one-off transaction and when turning
+          // an existing transaction into a recurring one (the transaction is
+          // kept and only a schedule is added).
+          const separator = preferredDateSeparator(props.txCache.transactions);
+          const newTx: EnhancedTransaction = {
+            blockLine: -1,
+            block: {
+              firstLine: -1,
+              lastLine: -1,
+              block: '',
+            },
+            type: 'tx',
+            value: {
+              payee: localPayee,
+              date: toLedgerDate(values.date, separator),
+              expenselines,
+              check: effectiveInitial.value.check,
+              comment,
+            },
+          };
+          const txStr = formatTransaction(newTx, props.currencySymbol);
+
           if (values.recurring.enabled) {
             const period = {
               intervalCount: values.recurring.intervalCount,
@@ -755,9 +780,8 @@ export const EditTransaction: React.FC<{
                   : undefined,
               // When editing an existing schedule, the date entered is taken
               // literally as the next occurrence (a one-off override); the
-              // schedule resumes on its regular anchor afterwards. For a brand
-              // new schedule, snap the start to the first matching occurrence of
-              // the chosen anchor.
+              // schedule resumes on its regular anchor afterwards. Otherwise snap
+              // to the first matching occurrence of the chosen anchor.
               nextDate: recurringEdit
                 ? values.date
                 : firstOccurrenceOnOrAfter(values.date, period),
@@ -769,34 +793,28 @@ export const EditTransaction: React.FC<{
               block: recurringEdit ? recurringEdit.block : undefined,
             };
             if (recurringEdit) {
+              // Editing the schedule itself: just save it.
               props.updater.saveRecurring(rt).then(props.close);
+            } else if (props.operation === 'modify') {
+              // Adding recurrence to a transaction that already exists: keep that
+              // transaction (with any edits) and only create the schedule, whose
+              // next occurrence falls after the existing transaction's date. No
+              // duplicate transaction is created.
+              props.updater
+                .addRecurringToExisting(
+                  props.initialState,
+                  txStr,
+                  rt,
+                  values.date,
+                )
+                .then(props.close);
             } else {
+              // Brand new recurring transaction ("Add to ledger"): add the first
+              // transaction now and create the schedule.
               props.updater.createRecurring(rt, values.date).then(props.close);
             }
             return;
           }
-
-          // This tx is not fully valid because we are not specifying a valid block.
-          // It's only complete enough that we can format it into a string.
-          const newTx: EnhancedTransaction = {
-            blockLine: -1,
-            block: {
-              firstLine: -1,
-              lastLine: -1,
-              block: '',
-            },
-            type: 'tx',
-            value: {
-              payee: localPayee,
-              // TODO: This is not a ISO8601. Once reconciliation is added, remove this and reformat file.
-              date: values.date.replace(/-/g, '/'),
-              expenselines,
-              check: effectiveInitial.value.check,
-              comment,
-            },
-          };
-
-          const txStr = formatTransaction(newTx, props.currencySymbol);
 
           switch (props.operation) {
             case 'new':
