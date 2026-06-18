@@ -124,37 +124,6 @@ interface ParsedPeriod {
   dayOfMonth?: number;
 }
 
-/**
- * parsePeriodExpression parses a period expression produced by
- * formatPeriodExpression. Returns undefined if the expression is not
- * recognized.
- */
-export const parsePeriodExpression = (
-  expr: string,
-): ParsedPeriod | undefined => {
-  const match =
-    /^every\s+(\d+)\s+(week|weeks|month|months)\s+on\s+(?:the\s+(\d+)|([a-z]+))$/i.exec(
-      expr.trim(),
-    );
-  if (!match) {
-    return undefined;
-  }
-  const intervalCount = parseInt(match[1], 10);
-  const unit = match[2].toLowerCase().startsWith('week') ? 'week' : 'month';
-  if (unit === 'week') {
-    const weekday = weekdayNames.indexOf((match[4] || '').toLowerCase());
-    if (weekday === -1) {
-      return undefined;
-    }
-    return { intervalCount, unit, weekday };
-  }
-  const dayOfMonth = parseInt(match[3], 10);
-  if (Number.isNaN(dayOfMonth) || dayOfMonth < 1 || dayOfMonth > 31) {
-    return undefined;
-  }
-  return { intervalCount, unit, dayOfMonth };
-};
-
 // --- Schedule math ---------------------------------------------------------
 
 /**
@@ -280,9 +249,8 @@ export const materializeTransaction = (
     blockLine: -1,
     block: { firstLine: -1, lastLine: -1, block: '' },
     value: {
-      // The date is used verbatim; callers writing to the file pass it in the
-      // same format the rest of the file uses (see preferredDateSeparator) so
-      // generated transactions match the surrounding ones.
+      // The date is used verbatim. Callers pass an ISO date (YYYY-MM-DD), the
+      // format the plugin writes throughout.
       date,
       payee: rt.payee,
       comment: formatComment(memo, allTags),
@@ -459,33 +427,25 @@ const parseRecurringBlock = (
     headMain = header.slice(0, commentIdx);
   }
   headMain = headMain.trim().replace(/^~\s*/, '');
+  // parts[0] is the (hledger) period expression; the schedule is read from the
+  // metadata comment instead, so only the payee is taken from the header.
   const parts = headMain.split(/\s{2,}/);
-  const periodExpr = parts[0].trim();
   const payee = parts.slice(1).join('  ').trim();
 
   const meta = parseMetadata(metaRaw);
   if (!meta.next) {
     throw new Error('Recurring transaction is missing its next date');
   }
-
-  // The schedule is taken from the metadata comment when present (the current
-  // format). Older blocks stored it only in the period expression, so fall back
-  // to parsing that for backwards compatibility.
-  let period: ParsedPeriod;
-  if (meta.unit) {
-    period = {
-      intervalCount: meta.intervalCount ?? 1,
-      unit: meta.unit,
-      weekday: meta.unit === 'week' ? (meta.weekday ?? 1) : undefined,
-      dayOfMonth: meta.unit === 'month' ? (meta.dayOfMonth ?? 1) : undefined,
-    };
-  } else {
-    const parsed = parsePeriodExpression(periodExpr);
-    if (!parsed) {
-      throw new Error(`Unrecognized recurring period: "${periodExpr}"`);
-    }
-    period = parsed;
+  if (!meta.unit) {
+    throw new Error('Recurring transaction is missing its schedule');
   }
+
+  const period: ParsedPeriod = {
+    intervalCount: meta.intervalCount ?? 1,
+    unit: meta.unit,
+    weekday: meta.unit === 'week' ? (meta.weekday ?? 1) : undefined,
+    dayOfMonth: meta.unit === 'month' ? (meta.dayOfMonth ?? 1) : undefined,
+  };
 
   const expenselines = parsePostings(blockLines.slice(1), aliases);
 

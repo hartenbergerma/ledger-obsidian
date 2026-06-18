@@ -11,7 +11,6 @@ import {
   isRecurringInstance,
   materializeTransaction,
   nextNominalDate,
-  parsePeriodExpression,
   RecurringTransaction,
 } from '../src/recurring';
 import { settingsWithDefaults } from '../src/settings';
@@ -70,23 +69,6 @@ describe('period expressions', () => {
     expect(formatPeriodExpression({ ...weekly, intervalCount: 2 })).toBe(
       'every 2 weeks',
     );
-  });
-
-  test('still parses the legacy period expression syntax', () => {
-    expect(parsePeriodExpression('every 1 month on the 15')).toEqual({
-      intervalCount: 1,
-      unit: 'month',
-      dayOfMonth: 15,
-    });
-    expect(parsePeriodExpression('every 2 weeks on monday')).toEqual({
-      intervalCount: 2,
-      unit: 'week',
-      weekday: 1,
-    });
-  });
-
-  test('returns undefined for unrecognized expressions', () => {
-    expect(parsePeriodExpression('sometimes')).toBeUndefined();
   });
 });
 
@@ -200,12 +182,9 @@ describe('materializeTransaction', () => {
     expect(isRecurringInstance(tx)).toBe(true);
   });
 
-  test('uses exactly the provided date without reformatting', () => {
+  test('uses the provided date verbatim', () => {
     expect(materializeTransaction(monthlyRent, '2026-09-15').value.date).toBe(
       '2026-09-15',
-    );
-    expect(materializeTransaction(monthlyRent, '2026/09/15').value.date).toBe(
-      '2026/09/15',
     );
   });
 });
@@ -304,23 +283,6 @@ describe('parsing recurring transactions from a file', () => {
     expect(rt.intervalCount).toBe(2);
     expect(rt.weekday).toBe(4);
     expect(rt.nextDate).toBe('2026-07-02');
-  });
-
-  test('parses legacy recurring blocks that predate the schedule metadata', () => {
-    // Older files stored the schedule only in the (non-hledger) period
-    // expression and had no int/unit/dom/dow metadata.
-    const file = [
-      '~ every 1 month on the 15    Rent    ; recur:old123 next:2026-07-15 workday:no',
-      '  Expenses:Rent    $1500.00',
-      '  Assets:Checking',
-    ].join('\n');
-    const cache = parse(file, settings);
-    expect(cache.parsingErrors).toEqual([]);
-    const rt = cache.recurringTransactions[0];
-    expect(rt.unit).toBe('month');
-    expect(rt.dayOfMonth).toBe(15);
-    expect(rt.intervalCount).toBe(1);
-    expect(rt.nextDate).toBe('2026-07-15');
   });
 });
 

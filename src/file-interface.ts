@@ -16,12 +16,7 @@ import {
   RecurringTransaction,
 } from './recurring';
 import type { ISettings } from './settings';
-import {
-  formatTransaction,
-  getTotal,
-  preferredDateSeparator,
-  toLedgerDate,
-} from './transaction-utils';
+import { formatTransaction, getTotal } from './transaction-utils';
 import type { MetadataCache, TFile, Vault } from 'obsidian';
 
 export class LedgerModifier {
@@ -192,8 +187,7 @@ export class LedgerModifier {
     rt: RecurringTransaction,
     dateISO: string,
   ): Promise<void> {
-    const separator = preferredDateSeparator(this.plugin.txCache.transactions);
-    const tx = materializeTransaction(rt, toLedgerDate(dateISO, separator));
+    const tx = materializeTransaction(rt, dateISO);
     const txStr = formatTransaction(tx, this.plugin.settings.currencySymbol);
     await this.appendLedger(txStr);
     await this.skipRecurring(rt);
@@ -208,11 +202,7 @@ export class LedgerModifier {
     rt: RecurringTransaction,
     firstDateISO: string,
   ): Promise<void> {
-    const separator = preferredDateSeparator(this.plugin.txCache.transactions);
-    const tx = materializeTransaction(
-      rt,
-      toLedgerDate(firstDateISO, separator),
-    );
+    const tx = materializeTransaction(rt, firstDateISO);
     const txStr = formatTransaction(tx, this.plugin.settings.currencySymbol);
     await this.appendLedger(txStr);
 

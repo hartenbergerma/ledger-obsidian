@@ -19,8 +19,6 @@ import {
   getTransactionTags,
   isRecurringInstance,
   isRecurringTag,
-  preferredDateSeparator,
-  toLedgerDate,
 } from '../transaction-utils';
 import { CurrencyInputFormik } from './CurrencyInput';
 import {
@@ -733,14 +731,11 @@ export const EditTransaction: React.FC<{
             lineToEnhancedExpenseLine(line),
           );
 
-          // Build the regular-transaction string from the form values. The date
-          // is written using the separator the rest of the file uses so the
-          // entry matches the surrounding transactions. This is not fully valid
-          // (it has no real block) but is complete enough to format to a string.
-          // It is used both when saving a one-off transaction and when turning
-          // an existing transaction into a recurring one (the transaction is
-          // kept and only a schedule is added).
-          const separator = preferredDateSeparator(props.txCache.transactions);
+          // Build the regular-transaction string from the form values. This is
+          // not fully valid (it has no real block) but is complete enough to
+          // format to a string. It is used both when saving a one-off
+          // transaction and when turning an existing transaction into a
+          // recurring one (the transaction is kept and only a schedule is added).
           const newTx: EnhancedTransaction = {
             blockLine: -1,
             block: {
@@ -751,7 +746,7 @@ export const EditTransaction: React.FC<{
             type: 'tx',
             value: {
               payee: localPayee,
-              date: toLedgerDate(values.date, separator),
+              date: values.date,
               expenselines,
               check: effectiveInitial.value.check,
               comment,

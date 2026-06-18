@@ -13,7 +13,6 @@ import {
   filterTransactions,
   getTotal,
   getVisibleTransactionTags,
-  parseLedgerDate,
   RECURRING_TAG_FILTER,
 } from '../transaction-utils';
 import { DeleteIcon, EditIcon } from './ActionIcons';
@@ -199,10 +198,10 @@ export const MobileTransactionList: React.FC<{
 
     // Sort so most recent transactions come first. Transactions on the same
     // date keep their order in the file (a stable sort over the file-ordered
-    // input), regardless of whether their dates use dashes or slashes.
+    // input).
     return [...filteredTransactions].sort((a, b) => {
-      const aDate = parseLedgerDate(a.value.date);
-      const bDate = parseLedgerDate(b.value.date);
+      const aDate = window.moment(a.value.date);
+      const bDate = window.moment(b.value.date);
       if (aDate.isSame(bDate)) {
         return 0;
       }
@@ -423,11 +422,10 @@ const buildTableRows = (
   });
 
   // Sort so most recent transactions come first. Transactions on the same date
-  // keep their order in the file (a stable sort over the file-ordered input),
-  // regardless of whether their dates use dashes or slashes.
+  // keep their order in the file (a stable sort over the file-ordered input).
   tableRows.sort((a, b): number => {
-    const aDate = parseLedgerDate(a.date);
-    const bDate = parseLedgerDate(b.date);
+    const aDate = window.moment(a.date);
+    const bDate = window.moment(b.date);
     if (aDate.isSame(bDate)) {
       return 0;
     }
@@ -580,19 +578,6 @@ const TransactionTable: React.FC<{
       {
         Header: 'Date',
         accessor: 'date',
-        // Sort by the actual date value so dash (YYYY-MM-DD) and slash
-        // (YYYY/MM/DD) dates for the same day compare equal, rather than by the
-        // raw string (which would order all slash dates before/after all dash
-        // dates and float recurring instances out of file order). Equal dates
-        // fall through to the orderByFn tie-break below, preserving file order.
-        sortType: (rowA: any, rowB: any, columnId: string): number => {
-          const a = parseLedgerDate(rowA.values[columnId]);
-          const b = parseLedgerDate(rowB.values[columnId]);
-          if (a.isSame(b)) {
-            return 0;
-          }
-          return a.isBefore(b) ? -1 : 1;
-        },
       },
       {
         Header: 'Payee',

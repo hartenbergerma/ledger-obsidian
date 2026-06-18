@@ -109,43 +109,6 @@ export const getCurrency = (
 };
 
 /**
- * Ledger and hledger both accept transaction dates written with ISO dashes
- * (YYYY-MM-DD) or with slashes (YYYY/MM/DD). parseLedgerDate parses either form
- * to a Moment, providing explicit formats so moment does not fall back to the
- * unreliable JS Date parser (and emit a console deprecation warning) for the
- * slash form. This also makes the two forms compare equal for the same day.
- */
-export const parseLedgerDate = (date: string): Moment =>
-  window.moment(date, ['YYYY-MM-DD', 'YYYY/MM/DD']);
-
-/**
- * preferredDateSeparator reports which date separator the file already uses, by
- * inspecting the existing transactions, so that dates the plugin writes (e.g.
- * recurring instances and transactions added through the form) match the
- * surrounding transactions rather than introducing a mix of `-` and `/`.
- * Defaults to the ISO dash when there are no transactions yet.
- */
-export const preferredDateSeparator = (
-  txs: EnhancedTransaction[],
-): '-' | '/' => {
-  for (const tx of txs) {
-    if (tx.value.date.includes('/')) {
-      return '/';
-    }
-    if (tx.value.date.includes('-')) {
-      return '-';
-    }
-  }
-  return '-';
-};
-
-/**
- * toLedgerDate renders an ISO date (YYYY-MM-DD) using the provided separator.
- */
-export const toLedgerDate = (isoDate: string, separator: '-' | '/'): string =>
-  separator === '/' ? isoDate.replace(/-/g, '/') : isoDate;
-
-/**
  * firstDate returns the date of the earliest transaction.
  */
 export const firstDate = (txs: EnhancedTransaction[]): Moment =>
