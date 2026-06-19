@@ -56,18 +56,23 @@ export const summarizeRecurrence = (value: RecurringFormValue): string => {
 
 /**
  * RecurringIcon renders the "two arrows circling each other" repeat glyph used
- * throughout the UI to denote recurring transactions. The default size matches
- * the tag icon (see TagIcon) so the recurring pill lines up with tag pills in
- * the transaction list and tag filter bar.
+ * throughout the UI to denote recurring transactions.
+ *
+ * The feather "repeat" artwork fills its 24x24 box edge-to-edge, which makes it
+ * read larger than other glyphs once scaled up. `padding` insets the glyph by
+ * widening the viewBox (leaving space around the arrows) without changing the
+ * rendered size, so the pill can size the icon to match the tag pills while
+ * keeping the arrows from looking oversized.
  */
-export const RecurringIcon: React.FC<{ size?: number }> = ({
+export const RecurringIcon: React.FC<{ size?: number; padding?: number }> = ({
   size = 10,
+  padding = 0,
 }): JSX.Element => (
   <svg
     className="ledger-recurring-icon"
     width={size}
     height={size}
-    viewBox="0 0 24 24"
+    viewBox={`${-padding} ${-padding} ${24 + padding * 2} ${24 + padding * 2}`}
     fill="none"
     stroke="currentColor"
     strokeWidth="2"
@@ -190,7 +195,9 @@ export const RecurringPill: React.FC<{
       onClick={onClick}
       onMouseDown={onClick ? (e) => e.preventDefault() : undefined}
     >
-      <RecurringIcon />
+      {/* The pill sizes the icon to line up with the tag pills; padding insets
+          the edge-to-edge "repeat" glyph so its arrows aren't oversized. */}
+      <RecurringIcon size={16} padding={4} />
       {label ? <span className="ledger-recurring-label">{label}</span> : null}
       {onRemove ? (
         <span
