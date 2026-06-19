@@ -14,6 +14,7 @@ import {
   getTotal,
   getVisibleTransactionTags,
   RECURRING_TAG_FILTER,
+  sortTransactionsForDisplay,
 } from '../transaction-utils';
 import { DeleteIcon, EditIcon } from './ActionIcons';
 import { ChartSegment } from './chartInteraction';
@@ -196,17 +197,7 @@ export const MobileTransactionList: React.FC<{
       props.selectedTag,
     );
 
-    // Sort so most recent transactions come first. Transactions on the same
-    // date keep their order in the file (a stable sort over the file-ordered
-    // input).
-    return [...filteredTransactions].sort((a, b) => {
-      const aDate = window.moment(a.value.date);
-      const bDate = window.moment(b.value.date);
-      if (aDate.isSame(bDate)) {
-        return 0;
-      }
-      return aDate.isBefore(bDate) ? 1 : -1;
-    });
+    return sortTransactionsForDisplay(filteredTransactions);
   }, [props.txCache, props.selectedAccounts, props.selectedTag, start, end]);
 
   const banner =
@@ -383,54 +374,45 @@ const buildTableRows = (
     <TransactionActions tx={tx} updater={updater} />
   );
 
-  const tableRows = transactions.map((tx: EnhancedTransaction): TableRow => {
-    const nonCommentLines = tx.value.expenselines.filter(
-      (line): line is EnhancedExpenseLine => 'account' in line,
-    );
-
-    if (nonCommentLines.length < 2) {
-      // This should not make it past the parser, but this is necessary for type checking.
-      throw new Error(
-        'Unexpected transaction with fewer than two account lines',
+  const tableRows = sortTransactionsForDisplay(transactions).map(
+    (tx: EnhancedTransaction): TableRow => {
+      const nonCommentLines = tx.value.expenselines.filter(
+        (line): line is EnhancedExpenseLine => 'account' in line,
       );
-    }
 
-    if (nonCommentLines.length === 2) {
-      // If there are only two lines, then this is a simple 'from->to' transaction
+      if (nonCommentLines.length < 2) {
+        // This should not make it past the parser, but this is necessary for type checking.
+        throw new Error(
+          'Unexpected transaction with fewer than two account lines',
+        );
+      }
+
+      if (nonCommentLines.length === 2) {
+        // If there are only two lines, then this is a simple 'from->to' transaction
+        return {
+          date: tx.value.date,
+          payee: tx.value.payee,
+          tags: getVisibleTransactionTags(tx),
+          recurring: isRecurringInstance(tx),
+          total: getTotal(tx, currencySymbol),
+          from: nonCommentLines[1].account,
+          to: nonCommentLines[0].account,
+          actions: makeActions(tx),
+        };
+      }
+      // Otherwise, there are multiple 'to' lines to consider
       return {
         date: tx.value.date,
         payee: tx.value.payee,
         tags: getVisibleTransactionTags(tx),
         recurring: isRecurringInstance(tx),
         total: getTotal(tx, currencySymbol),
-        from: nonCommentLines[1].account,
-        to: nonCommentLines[0].account,
+        from: nonCommentLines[nonCommentLines.length - 1].account,
+        to: <i>Multiple</i>,
         actions: makeActions(tx),
       };
-    }
-    // Otherwise, there are multiple 'to' lines to consider
-    return {
-      date: tx.value.date,
-      payee: tx.value.payee,
-      tags: getVisibleTransactionTags(tx),
-      recurring: isRecurringInstance(tx),
-      total: getTotal(tx, currencySymbol),
-      from: nonCommentLines[nonCommentLines.length - 1].account,
-      to: <i>Multiple</i>,
-      actions: makeActions(tx),
-    };
-  });
-
-  // Sort so most recent transactions come first. Transactions on the same date
-  // keep their order in the file (a stable sort over the file-ordered input).
-  tableRows.sort((a, b): number => {
-    const aDate = window.moment(a.date);
-    const bDate = window.moment(b.date);
-    if (aDate.isSame(bDate)) {
-      return 0;
-    }
-    return aDate.isBefore(bDate) ? 1 : -1;
-  });
+    },
+  );
 
   return tableRows;
 };
@@ -607,11 +589,11 @@ const TransactionTable: React.FC<{
     ],
     [onSelectTag],
   );
-  // Break ties on the original row order (which buildTableRows produced in file
-  // order for same-date rows) regardless of sort direction. react-table's
-  // default reverses ties for descending sorts, which would float the most
-  // recently appended entries (e.g. recurring instances) to the top of their
-  // day; this keeps same-date transactions in file order in either direction.
+  // Break ties on the original row order (the order buildTableRows already
+  // produced — newest date first, most recently added first within a day)
+  // regardless of sort direction. react-table's default reverses ties for
+  // descending sorts, which would undo that ordering; keeping a stable
+  // forward-index tie-break preserves it whether the user sorts up or down.
   const orderByFn = React.useCallback(
     (rows: Row<any>[], sortFns: SortByFn<any>[], dirs: boolean[]): Row<any>[] =>
       [...rows].sort((rowA, rowB) => {

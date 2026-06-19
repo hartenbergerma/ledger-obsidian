@@ -117,6 +117,27 @@ export const firstDate = (txs: EnhancedTransaction[]): Moment =>
     return current.isSameOrBefore(prev) ? current : prev;
   }, window.moment());
 
+/**
+ * sortTransactionsForDisplay orders transactions for the transaction list:
+ * newest date first, and for transactions sharing a date the most recently
+ * added (the one later in the file) first. The input is expected to be in file
+ * order, so the relative file position is used to break ties.
+ */
+export const sortTransactionsForDisplay = (
+  txs: EnhancedTransaction[],
+): EnhancedTransaction[] =>
+  txs
+    .map((tx, fileIndex) => ({ tx, fileIndex }))
+    .sort((a, b) => {
+      const aDate = window.moment(a.tx.value.date);
+      const bDate = window.moment(b.tx.value.date);
+      if (aDate.isSame(bDate)) {
+        return b.fileIndex - a.fileIndex;
+      }
+      return aDate.isBefore(bDate) ? 1 : -1;
+    })
+    .map(({ tx }) => tx);
+
 export const valueForAccount = (
   tx: EnhancedTransaction,
   account: string,
