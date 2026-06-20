@@ -118,42 +118,81 @@ const MobileTxListStyle = styled.div`
     margin-bottom: 8px;
   }
 
-  .mobile-tx-row {
+  .mobile-tx-body {
     display: flex;
-    align-items: baseline;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  /* Left column: payee + tags, then date, then the from ➜ to accounts, each on
+     its own line. min-width:0 lets long account names wrap inside the flex row
+     instead of overflowing. */
+  .mobile-tx-info {
+    flex-grow: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
 
   .mobile-tx-payee {
-    flex-grow: 1;
+    display: flex;
+    flex-wrap: wrap;
+    /* Vertically center the tag / recurring pills against the payee text. */
+    align-items: center;
+    gap: 4px;
     font-weight: bold;
     overflow-wrap: anywhere;
   }
 
-  /* Space between the payee name and its tag pill. */
-  .mobile-tx-payee-name {
-    margin-right: 8px;
-  }
-
-  .mobile-tx-total {
-    flex-shrink: 0;
-    margin-left: 8px;
-  }
-
-  .mobile-tx-details {
+  .mobile-tx-date {
     color: var(--text-muted);
     font-size: 0.85em;
-    margin-top: 4px;
-    align-items: center;
   }
 
   .mobile-tx-accounts {
-    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    color: var(--text-muted);
+    font-size: 0.85em;
     overflow-wrap: anywhere;
   }
 
-  .mobile-tx-actions {
+  /* Right column: total at the top, the action buttons at the bottom, using the
+     full height of the (now taller) card. */
+  .mobile-tx-side {
     flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .mobile-tx-total {
     white-space: nowrap;
+  }
+
+  .mobile-tx-actions {
+    white-space: nowrap;
+  }
+
+  .mobile-tx-actions .ledger-row-actions {
+    gap: 8px;
+  }
+
+  /* The stacked layout leaves room to make the edit/delete buttons round
+     touch targets rather than squished rectangles. */
+  .mobile-tx-actions .ledger-row-action {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border-radius: 50%;
+    background: var(--background-secondary);
+  }
+
+  .mobile-tx-actions .ledger-row-action:hover {
+    background: var(--background-modifier-hover);
   }
 
   .mobile-tx-more {
@@ -267,33 +306,37 @@ export const MobileTransactionEntry: React.FC<{
 
   return (
     <div className="mobile-tx-card">
-      <div className="mobile-tx-row">
-        <span className="mobile-tx-payee">
-          <span className="mobile-tx-payee-name">{props.tx.value.payee}</span>
-          {isRecurringInstance(props.tx) ? (
-            <RecurringPill title="Generated from a recurring transaction" />
-          ) : null}
-          {tags.map((tag) => (
-            <TagPill
-              key={tag}
-              tag={tag}
-              onClick={
-                props.onSelectTag ? () => props.onSelectTag?.(tag) : undefined
-              }
-            />
-          ))}
-        </span>
-        <span className="mobile-tx-total">
-          {getTotal(props.tx, props.currencySymbol)}
-        </span>
-      </div>
-      <div className="mobile-tx-row mobile-tx-details">
-        <span className="mobile-tx-accounts">
-          {props.tx.value.date} · {from} ➜ {to}
-        </span>
-        <span className="mobile-tx-actions">
-          <TransactionActions tx={props.tx} updater={props.updater} />
-        </span>
+      <div className="mobile-tx-body">
+        <div className="mobile-tx-info">
+          <span className="mobile-tx-payee">
+            <span className="mobile-tx-payee-name">{props.tx.value.payee}</span>
+            {isRecurringInstance(props.tx) ? (
+              <RecurringPill title="Generated from a recurring transaction" />
+            ) : null}
+            {tags.map((tag) => (
+              <TagPill
+                key={tag}
+                tag={tag}
+                onClick={
+                  props.onSelectTag ? () => props.onSelectTag?.(tag) : undefined
+                }
+              />
+            ))}
+          </span>
+          <span className="mobile-tx-date">{props.tx.value.date}</span>
+          <span className="mobile-tx-accounts">
+            <span className="mobile-tx-from">{from} ➜</span>
+            <span className="mobile-tx-to">{to}</span>
+          </span>
+        </div>
+        <div className="mobile-tx-side">
+          <span className="mobile-tx-total">
+            {getTotal(props.tx, props.currencySymbol)}
+          </span>
+          <span className="mobile-tx-actions">
+            <TransactionActions tx={props.tx} updater={props.updater} />
+          </span>
+        </div>
       </div>
     </div>
   );
