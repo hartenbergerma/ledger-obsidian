@@ -177,24 +177,6 @@ const MobileTxListStyle = styled.div`
     white-space: nowrap;
   }
 
-  .mobile-tx-actions .ledger-row-actions {
-    gap: 8px;
-  }
-
-  /* The stacked layout leaves room to make the edit/delete buttons round
-     touch targets rather than squished rectangles. */
-  .mobile-tx-actions .ledger-row-action {
-    width: 34px;
-    height: 34px;
-    padding: 0;
-    border-radius: 50%;
-    background: var(--background-secondary);
-  }
-
-  .mobile-tx-actions .ledger-row-action:hover {
-    background: var(--background-modifier-hover);
-  }
-
   .mobile-tx-more {
     width: 100%;
   }

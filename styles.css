@@ -1379,7 +1379,20 @@ tr.introjs-showElement > th {
   fill: var(--text-normal);
 }
 
-/* Larger touch targets on mobile. */
+/* Round touch targets on mobile, shared by the transaction and recurring
+   lists. */
 .is-mobile .ledger-row-action {
-  padding: 7px 12px;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--background-secondary);
+}
+
+.is-mobile .ledger-row-action:hover {
+  background: var(--background-modifier-hover);
+}
+
+.is-mobile .ledger-row-actions {
+  gap: 8px;
 }

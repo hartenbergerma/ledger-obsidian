@@ -152,6 +152,14 @@ const MobileRecurringStyles = styled.div`
     margin-top: 8px;
   }
 
+  /* Match the Add/Skip button height to the round edit/delete buttons (40px,
+     from the shared .is-mobile .ledger-row-action rule) so they line up. */
+  .ledger-recurring-card-actions > button {
+    height: 40px;
+    padding: 0 16px;
+    border-radius: 20px;
+  }
+
   .ledger-recurring-due {
     color: var(--text-on-accent);
     background: var(--interactive-accent);
