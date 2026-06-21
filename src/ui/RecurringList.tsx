@@ -75,6 +75,13 @@ const RecurringStyles = styled.div`
     border-bottom: 1px solid var(--background-modifier-border);
   }
 
+  /* Keep the date and its "Due" pill together on one line so the first column
+     is wide enough for both. */
+  th:first-child,
+  td:first-child {
+    white-space: nowrap;
+  }
+
   tr:last-child td {
     border-bottom: 0;
   }
@@ -103,6 +110,11 @@ const RecurringStyles = styled.div`
 
   .ledger-recurring-actions button {
     margin: 0;
+  }
+
+  /* Highlight the Add/Skip button when the schedule is due. */
+  .ledger-recurring-accept.is-due {
+    box-shadow: 0 0 0 2px var(--interactive-accent);
   }
 `;
 
@@ -152,12 +164,24 @@ const MobileRecurringStyles = styled.div`
     margin-top: 8px;
   }
 
-  /* Match the Add/Skip button height to the round edit/delete buttons (40px,
-     from the shared .is-mobile .ledger-row-action rule) so they line up. */
-  .ledger-recurring-card-actions > button {
+  /* The Add/Skip button lines up with the round edit/delete buttons (40px, from
+     the shared .is-mobile .ledger-row-action rule) and uses the same colour.
+     When the schedule is due it gets an accent border, matching the "Due"
+     pill. */
+  .ledger-recurring-accept {
     height: 40px;
     padding: 0 16px;
     border-radius: 20px;
+    background: var(--background-secondary);
+    border: 1px solid transparent;
+  }
+
+  .ledger-recurring-accept:hover {
+    background: var(--background-modifier-hover);
+  }
+
+  .ledger-recurring-accept.is-due {
+    border-color: var(--interactive-accent);
   }
 
   .ledger-recurring-due {
@@ -260,6 +284,11 @@ export const RecurringList: React.FC<{
               <td className="ledger-recurring-actions">
                 <span className="ledger-row-actions">
                   <button
+                    className={
+                      due
+                        ? 'ledger-recurring-accept is-due'
+                        : 'ledger-recurring-accept'
+                    }
                     onClick={() => props.updater.promptAcceptRecurring(rt)}
                   >
                     Add/Skip
@@ -328,7 +357,14 @@ export const MobileRecurringList: React.FC<{
             {from} ➜ {to}
           </div>
           <div className="ledger-recurring-card-actions">
-            <button onClick={() => props.updater.promptAcceptRecurring(rt)}>
+            <button
+              className={
+                due
+                  ? 'ledger-recurring-accept is-due'
+                  : 'ledger-recurring-accept'
+              }
+              onClick={() => props.updater.promptAcceptRecurring(rt)}
+            >
               Add/Skip
             </button>
             <span className="ledger-row-actions">
