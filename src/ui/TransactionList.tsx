@@ -14,6 +14,7 @@ import {
   getTotal,
   getVisibleTransactionTags,
   RECURRING_TAG_FILTER,
+  sortTransactionsForDisplay,
 } from '../transaction-utils';
 import { DeleteIcon, EditIcon } from './ActionIcons';
 import { ChartSegment } from './chartInteraction';
@@ -21,7 +22,14 @@ import { RecurringPill } from './Recurring';
 import { TagFilter, TagPill } from './Tag';
 import { Moment } from 'moment';
 import React from 'react';
-import { Column, useFilters, useSortBy, useTable } from 'react-table';
+import {
+  Column,
+  Row,
+  SortByFn,
+  useFilters,
+  useSortBy,
+  useTable,
+} from 'react-table';
 import styled from 'styled-components';
 
 /**
@@ -110,41 +118,62 @@ const MobileTxListStyle = styled.div`
     margin-bottom: 8px;
   }
 
-  .mobile-tx-row {
+  .mobile-tx-body {
     display: flex;
-    align-items: baseline;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  /* Left column: payee + tags, then date, then the from ➜ to accounts, each on
+     its own line. min-width:0 lets long account names wrap inside the flex row
+     instead of overflowing. */
+  .mobile-tx-info {
+    flex-grow: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
 
   .mobile-tx-payee {
-    flex-grow: 1;
+    display: flex;
+    flex-wrap: wrap;
+    /* Vertically center the tag / recurring pills against the payee text. */
+    align-items: center;
+    gap: 4px;
     font-weight: bold;
     overflow-wrap: anywhere;
   }
 
-  /* Space between the payee name and its tag pill. */
-  .mobile-tx-payee-name {
-    margin-right: 8px;
-  }
-
-  .mobile-tx-total {
-    flex-shrink: 0;
-    margin-left: 8px;
-  }
-
-  .mobile-tx-details {
+  .mobile-tx-date {
     color: var(--text-muted);
     font-size: 0.85em;
-    margin-top: 4px;
-    align-items: center;
   }
 
   .mobile-tx-accounts {
-    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    color: var(--text-muted);
+    font-size: 0.85em;
     overflow-wrap: anywhere;
   }
 
-  .mobile-tx-actions {
+  /* Right column: total at the top, the action buttons at the bottom, using the
+     full height of the (now taller) card. */
+  .mobile-tx-side {
     flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .mobile-tx-total {
+    white-space: nowrap;
+  }
+
+  .mobile-tx-actions {
     white-space: nowrap;
   }
 
@@ -189,15 +218,7 @@ export const MobileTransactionList: React.FC<{
       props.selectedTag,
     );
 
-    // Sort so most recent transactions come first
-    return [...filteredTransactions].sort((a, b) => {
-      const aDate = window.moment(a.value.date);
-      const bDate = window.moment(b.value.date);
-      if (aDate.isSame(bDate)) {
-        return 0;
-      }
-      return aDate.isBefore(bDate) ? 1 : -1;
-    });
+    return sortTransactionsForDisplay(filteredTransactions);
   }, [props.txCache, props.selectedAccounts, props.selectedTag, start, end]);
 
   const banner =
@@ -267,33 +288,37 @@ export const MobileTransactionEntry: React.FC<{
 
   return (
     <div className="mobile-tx-card">
-      <div className="mobile-tx-row">
-        <span className="mobile-tx-payee">
-          <span className="mobile-tx-payee-name">{props.tx.value.payee}</span>
-          {isRecurringInstance(props.tx) ? (
-            <RecurringPill title="Generated from a recurring transaction" />
-          ) : null}
-          {tags.map((tag) => (
-            <TagPill
-              key={tag}
-              tag={tag}
-              onClick={
-                props.onSelectTag ? () => props.onSelectTag?.(tag) : undefined
-              }
-            />
-          ))}
-        </span>
-        <span className="mobile-tx-total">
-          {getTotal(props.tx, props.currencySymbol)}
-        </span>
-      </div>
-      <div className="mobile-tx-row mobile-tx-details">
-        <span className="mobile-tx-accounts">
-          {props.tx.value.date} · {from} ➜ {to}
-        </span>
-        <span className="mobile-tx-actions">
-          <TransactionActions tx={props.tx} updater={props.updater} />
-        </span>
+      <div className="mobile-tx-body">
+        <div className="mobile-tx-info">
+          <span className="mobile-tx-payee">
+            <span className="mobile-tx-payee-name">{props.tx.value.payee}</span>
+            {isRecurringInstance(props.tx) ? (
+              <RecurringPill title="Generated from a recurring transaction" />
+            ) : null}
+            {tags.map((tag) => (
+              <TagPill
+                key={tag}
+                tag={tag}
+                onClick={
+                  props.onSelectTag ? () => props.onSelectTag?.(tag) : undefined
+                }
+              />
+            ))}
+          </span>
+          <span className="mobile-tx-date">{props.tx.value.date}</span>
+          <span className="mobile-tx-accounts">
+            <span className="mobile-tx-from">{from} ➜</span>
+            <span className="mobile-tx-to">{to}</span>
+          </span>
+        </div>
+        <div className="mobile-tx-side">
+          <span className="mobile-tx-total">
+            {getTotal(props.tx, props.currencySymbol)}
+          </span>
+          <span className="mobile-tx-actions">
+            <TransactionActions tx={props.tx} updater={props.updater} />
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -374,53 +399,45 @@ const buildTableRows = (
     <TransactionActions tx={tx} updater={updater} />
   );
 
-  const tableRows = transactions.map((tx: EnhancedTransaction): TableRow => {
-    const nonCommentLines = tx.value.expenselines.filter(
-      (line): line is EnhancedExpenseLine => 'account' in line,
-    );
-
-    if (nonCommentLines.length < 2) {
-      // This should not make it past the parser, but this is necessary for type checking.
-      throw new Error(
-        'Unexpected transaction with fewer than two account lines',
+  const tableRows = sortTransactionsForDisplay(transactions).map(
+    (tx: EnhancedTransaction): TableRow => {
+      const nonCommentLines = tx.value.expenselines.filter(
+        (line): line is EnhancedExpenseLine => 'account' in line,
       );
-    }
 
-    if (nonCommentLines.length === 2) {
-      // If there are only two lines, then this is a simple 'from->to' transaction
+      if (nonCommentLines.length < 2) {
+        // This should not make it past the parser, but this is necessary for type checking.
+        throw new Error(
+          'Unexpected transaction with fewer than two account lines',
+        );
+      }
+
+      if (nonCommentLines.length === 2) {
+        // If there are only two lines, then this is a simple 'from->to' transaction
+        return {
+          date: tx.value.date,
+          payee: tx.value.payee,
+          tags: getVisibleTransactionTags(tx),
+          recurring: isRecurringInstance(tx),
+          total: getTotal(tx, currencySymbol),
+          from: nonCommentLines[1].account,
+          to: nonCommentLines[0].account,
+          actions: makeActions(tx),
+        };
+      }
+      // Otherwise, there are multiple 'to' lines to consider
       return {
         date: tx.value.date,
         payee: tx.value.payee,
         tags: getVisibleTransactionTags(tx),
         recurring: isRecurringInstance(tx),
         total: getTotal(tx, currencySymbol),
-        from: nonCommentLines[1].account,
-        to: nonCommentLines[0].account,
+        from: nonCommentLines[nonCommentLines.length - 1].account,
+        to: <i>Multiple</i>,
         actions: makeActions(tx),
       };
-    }
-    // Otherwise, there are multiple 'to' lines to consider
-    return {
-      date: tx.value.date,
-      payee: tx.value.payee,
-      tags: getVisibleTransactionTags(tx),
-      recurring: isRecurringInstance(tx),
-      total: getTotal(tx, currencySymbol),
-      from: nonCommentLines[nonCommentLines.length - 1].account,
-      to: <i>Multiple</i>,
-      actions: makeActions(tx),
-    };
-  });
-
-  // Sort so most recent transactions come first
-  tableRows.sort((a, b): number => {
-    const aDate = window.moment(a.date);
-    const bDate = window.moment(b.date);
-    if (aDate.isSame(bDate)) {
-      return 0;
-    }
-    return aDate.isBefore(bDate) ? 1 : -1;
-  });
+    },
+  );
 
   return tableRows;
 };
@@ -597,7 +614,37 @@ const TransactionTable: React.FC<{
     ],
     [onSelectTag],
   );
-  const tableInstance = useTable({ columns, data }, useFilters, useSortBy);
+  // Break ties on the original row order (the order buildTableRows already
+  // produced — newest date first, most recently added first within a day)
+  // regardless of sort direction. react-table's default reverses ties for
+  // descending sorts, which would undo that ordering; keeping a stable
+  // forward-index tie-break preserves it whether the user sorts up or down.
+  const orderByFn = React.useCallback(
+    (rows: Row<any>[], sortFns: SortByFn<any>[], dirs: boolean[]): Row<any>[] =>
+      [...rows].sort((rowA, rowB) => {
+        for (let i = 0; i < sortFns.length; i++) {
+          // react-table invokes these wrapped sort functions with just the two
+          // rows (the column id and direction are already baked in).
+          const result = (sortFns[i] as (a: Row<any>, b: Row<any>) => number)(
+            rowA,
+            rowB,
+          );
+          if (result !== 0) {
+            // A direction of `false` means descending, in which case react-table
+            // negates the comparator result.
+            return dirs[i] ? result : -result;
+          }
+        }
+        return rowA.index - rowB.index;
+      }),
+    [],
+  );
+
+  const tableInstance = useTable(
+    { columns, data, orderByFn },
+    useFilters,
+    useSortBy,
+  );
 
   const { getTableProps, getTableBodyProps, headerGroups, rows, prepareRow } =
     tableInstance;
