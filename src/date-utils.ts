@@ -4,14 +4,14 @@ import { Moment } from 'moment';
 
 export type Interval = 'day' | 'week' | 'month';
 
-export type DateRange = 'week' | 'month' | '6months' | 'year' | 'all';
+export type DateRange = 'week' | 'month' | 'year' | 'all' | 'custom';
 
 export const dateRangeOptions: { id: DateRange; label: string }[] = [
   { id: 'week', label: 'Last Week' },
   { id: 'month', label: 'Last Month' },
-  { id: '6months', label: 'Last 6 Months' },
   { id: 'year', label: 'Last Year' },
   { id: 'all', label: 'All Time' },
+  { id: 'custom', label: 'Custom' },
 ];
 
 /**
@@ -49,13 +49,14 @@ export const resolveDateRange = (
     case 'month':
       startDate = endDate.clone().subtract(1, 'month');
       break;
-    case '6months':
-      startDate = endDate.clone().subtract(6, 'months');
-      break;
     case 'year':
       startDate = endDate.clone().subtract(1, 'year');
       break;
     case 'all':
+      startDate = window.moment.min(firstTxDate.clone(), endDate);
+      break;
+    case 'custom':
+      // Custom ranges are resolved externally via chooseInterval; fall back to all-time.
       startDate = window.moment.min(firstTxDate.clone(), endDate);
       break;
   }
@@ -74,24 +75,16 @@ export const isDateRangeAvailable = (
   firstTxDate: Moment,
   now: Moment = window.moment(),
 ): boolean => {
-  let rangeStart: Moment;
   switch (range) {
     case 'week':
-      rangeStart = now.clone().subtract(1, 'week');
-      break;
+      // Only offer "Last Week" when there is data older than one week.
+      return firstTxDate.isBefore(now.clone().subtract(1, 'week'));
     case 'month':
-      rangeStart = now.clone().subtract(1, 'month');
-      break;
-    case '6months':
-      rangeStart = now.clone().subtract(6, 'months');
-      break;
     case 'year':
-      rangeStart = now.clone().subtract(1, 'year');
-      break;
     case 'all':
+    case 'custom':
       return true;
   }
-  return firstTxDate.isBefore(rangeStart);
 };
 
 /**
@@ -119,8 +112,13 @@ export const makeChartLabelFormatter =
     if (index % everyNth !== 0) {
       return null;
     }
-    const format = interval === 'month' ? 'MMM YYYY' : 'MMM D';
-    return window.moment(value).format(format);
+    if (interval === 'month') {
+      const m = window.moment(value);
+      // Include the day when the bucket doesn't start on the 1st so that
+      // mid-month ranges are not misread as aligning with the month start.
+      return m.format(m.date() === 1 ? 'MMM YYYY' : 'MMM D');
+    }
+    return window.moment(value).format('MMM D');
   };
 
 /**

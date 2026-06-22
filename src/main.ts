@@ -50,6 +50,7 @@ export default class LedgerPlugin extends Plugin {
       const ledgerFile = await this.createLedgerFileIfMissing();
       new LedgerModifier(this, ledgerFile).openExpenseModal('new');
     });
+    this.addRibbonIcon('bar-chart-2', 'Open Ledger dashboard', this.openLedgerDashboard);
 
     this.registerObsidianProtocolHandler('ledger', this.handleProtocolAction);
 

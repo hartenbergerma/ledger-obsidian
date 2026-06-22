@@ -2,7 +2,12 @@ import {
   makeDailyAccountBalanceChangeMap,
   makeDailyBalanceMap,
 } from '../balance-utils';
-import { DateRange, Interval, resolveDateRange } from '../date-utils';
+import {
+  chooseInterval,
+  DateRange,
+  Interval,
+  resolveDateRange,
+} from '../date-utils';
 import { LedgerModifier } from '../file-interface';
 import type { TransactionCache } from '../parser';
 import { ISettings } from '../settings';
@@ -106,16 +111,48 @@ const useDateRange = (
 ): {
   dateRange: DateRange;
   setDateRange: (range: DateRange) => void;
+  customStartDate: Moment;
+  customEndDate: Moment;
+  setCustomDates: (start: Moment, end: Moment) => void;
   startDate: Moment;
   endDate: Moment;
   interval: Interval;
 } => {
   const [dateRange, setDateRange] = React.useState<DateRange>(initialRange);
-  const { startDate, endDate, interval } = React.useMemo(
-    () => resolveDateRange(dateRange, txCache.firstDate),
-    [dateRange, txCache],
+  const [customStartDate, setCustomStartDate] = React.useState<Moment>(() =>
+    window.moment().subtract(1, 'month'),
   );
-  return { dateRange, setDateRange, startDate, endDate, interval };
+  const [customEndDate, setCustomEndDate] = React.useState<Moment>(() =>
+    window.moment(),
+  );
+
+  const setCustomDates = React.useCallback((start: Moment, end: Moment) => {
+    setCustomStartDate(start);
+    setCustomEndDate(end);
+    setDateRange('custom');
+  }, []);
+
+  const { startDate, endDate, interval } = React.useMemo(() => {
+    if (dateRange === 'custom') {
+      return {
+        startDate: customStartDate,
+        endDate: customEndDate,
+        interval: chooseInterval(customStartDate, customEndDate),
+      };
+    }
+    return resolveDateRange(dateRange, txCache.firstDate);
+  }, [dateRange, customStartDate, customEndDate, txCache]);
+
+  return {
+    dateRange,
+    setDateRange,
+    customStartDate,
+    customEndDate,
+    setCustomDates,
+    startDate,
+    endDate,
+    interval,
+  };
 };
 
 const MobileStyles = styled.div`
@@ -134,8 +171,16 @@ const MobileDashboard: React.FC<{
   updater: LedgerModifier;
 }> = (props): JSX.Element => {
   const dailyAccountBalanceMap = useDailyAccountBalanceMap(props.txCache);
-  const { dateRange, setDateRange, startDate, endDate, interval } =
-    useDateRange(props.txCache, 'month');
+  const {
+    dateRange,
+    setDateRange,
+    customStartDate,
+    customEndDate,
+    setCustomDates,
+    startDate,
+    endDate,
+    interval,
+  } = useDateRange(props.txCache, 'month');
   const [selectedAccounts, setSelectedAccounts] = React.useState<string[]>([]);
   const [accountsExpanded, setAccountsExpanded] = React.useState(false);
   const [selectedTag, setSelectedTag] = React.useState<string | null>(null);
@@ -172,6 +217,9 @@ const MobileDashboard: React.FC<{
         range={dateRange}
         setRange={setDateRange}
         firstDate={props.txCache.firstDate}
+        customStart={customStartDate}
+        customEnd={customEndDate}
+        onCustomDatesChange={setCustomDates}
       />
 
       <button
@@ -253,8 +301,16 @@ const DesktopDashboard: React.FC<{
   updater: LedgerModifier;
 }> = (props): JSX.Element => {
   const dailyAccountBalanceMap = useDailyAccountBalanceMap(props.txCache);
-  const { dateRange, setDateRange, startDate, endDate, interval } =
-    useDateRange(props.txCache, 'month');
+  const {
+    dateRange,
+    setDateRange,
+    customStartDate,
+    customEndDate,
+    setCustomDates,
+    startDate,
+    endDate,
+    interval,
+  } = useDateRange(props.txCache, 'month');
   const [selectedAccounts, setSelectedAccounts] = React.useState<string[]>([]);
   const [selectedTag, setSelectedTag] = React.useState<string | null>(null);
   const toggleTag = (tag: string): void =>
@@ -291,6 +347,9 @@ const DesktopDashboard: React.FC<{
           range={dateRange}
           setRange={setDateRange}
           firstDate={props.txCache.firstDate}
+          customStart={customStartDate}
+          customEnd={customEndDate}
+          onCustomDatesChange={setCustomDates}
         />
         {props.tutorialIndex !== -1 ? (
           <Tutorial
