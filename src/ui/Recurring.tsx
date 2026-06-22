@@ -65,8 +65,8 @@ export const summarizeRecurrence = (value: RecurringFormValue): string => {
  * keeping the arrows from looking oversized.
  */
 export const RecurringIcon: React.FC<{ size?: number; padding?: number }> = ({
-  size = 10,
-  padding = 0,
+  size = 16,
+  padding = 4,
 }): JSX.Element => (
   <svg
     className="ledger-recurring-icon"
@@ -197,7 +197,7 @@ export const RecurringPill: React.FC<{
     >
       {/* The pill sizes the icon to line up with the tag pills; padding insets
           the edge-to-edge "repeat" glyph so its arrows aren't oversized. */}
-      <RecurringIcon size={16} padding={4} />
+      <RecurringIcon size={19} padding={6} />
       {label ? <span className="ledger-recurring-label">{label}</span> : null}
       {onRemove ? (
         <span
