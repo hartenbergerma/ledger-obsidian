@@ -4,10 +4,9 @@ import { Moment } from 'moment';
 
 export type Interval = 'day' | 'week' | 'month';
 
-export type DateRange = 'week' | 'month' | 'year' | 'all' | 'custom';
+export type DateRange = 'month' | 'year' | 'all' | 'custom';
 
 export const dateRangeOptions: { id: DateRange; label: string }[] = [
-  { id: 'week', label: 'Last Week' },
   { id: 'month', label: 'Last Month' },
   { id: 'year', label: 'Last Year' },
   { id: 'all', label: 'All Time' },
@@ -43,9 +42,6 @@ export const resolveDateRange = (
   const endDate = window.moment();
   let startDate: Moment;
   switch (range) {
-    case 'week':
-      startDate = endDate.clone().subtract(1, 'week');
-      break;
     case 'month':
       startDate = endDate.clone().subtract(1, 'month');
       break;
@@ -64,61 +60,19 @@ export const resolveDateRange = (
 };
 
 /**
- * isDateRangeAvailable determines whether a named date range is worth offering
- * given the date of the oldest transaction. A "Last ..." range is only useful
- * when there is data older than the start of that range; otherwise it would
- * show exactly the same data as a shorter range or "All Time". The 'all' range
- * is always available.
- */
-export const isDateRangeAvailable = (
-  range: DateRange,
-  firstTxDate: Moment,
-  now: Moment = window.moment(),
-): boolean => {
-  switch (range) {
-    case 'week':
-      // Only offer "Last Week" when there is data older than one week.
-      return firstTxDate.isBefore(now.clone().subtract(1, 'week'));
-    case 'month':
-    case 'year':
-    case 'all':
-    case 'custom':
-      return true;
-  }
-};
-
-/**
- * availableDateRangeOptions returns the subset of dateRangeOptions which are
- * meaningful for the provided oldest transaction date. "All Time" is always
- * included.
- */
-export const availableDateRangeOptions = (
-  firstTxDate: Moment,
-  now: Moment = window.moment(),
-): { id: DateRange; label: string }[] =>
-  dateRangeOptions.filter(({ id }) =>
-    isDateRangeAvailable(id, firstTxDate, now),
-  );
-
-/**
  * makeChartLabelFormatter creates a chartist label interpolation function
- * which formats bucket names for the provided interval and skips labels when
- * there are too many buckets to remain readable.
+ * which formats bucket names (or axis tick timestamps) for the provided
+ * interval and skips labels when there are too many to remain readable.
  */
 export const makeChartLabelFormatter =
-  (interval: Interval, bucketCount: number, maxLabels = 12) =>
-  (value: string, index: number): string | null => {
-    const everyNth = Math.ceil(bucketCount / maxLabels);
+  (interval: Interval, tickCount: number, maxLabels = 12) =>
+  (value: string | number, index: number): string | null => {
+    const everyNth = Math.ceil(tickCount / maxLabels);
     if (index % everyNth !== 0) {
       return null;
     }
-    if (interval === 'month') {
-      const m = window.moment(value);
-      // Include the day when the bucket doesn't start on the 1st so that
-      // mid-month ranges are not misread as aligning with the month start.
-      return m.format(m.date() === 1 ? 'MMM YYYY' : 'MMM D');
-    }
-    return window.moment(value).format('MMM D');
+    const format = interval === 'month' ? 'MMM YYYY' : 'MMM D';
+    return window.moment(value).format(format);
   };
 
 /**
@@ -149,6 +103,39 @@ export const makeBucketNames = (
   }
 
   return names;
+};
+
+/**
+ * makeAxisTicks returns the x-axis tick positions (as millisecond timestamps)
+ * for a time-based chart axis. The data points are positioned by their actual
+ * date, so the ticks are placed at meaningful calendar boundaries rather than
+ * at the data points themselves:
+ *  - month: the first of each month within the range, so a point on e.g. the
+ *    15th sits halfway between two month ticks instead of on top of one.
+ *  - week/day: the bucket dates themselves, which are already evenly spaced.
+ */
+export const makeAxisTicks = (
+  interval: Interval,
+  startDate: Moment,
+  endDate: Moment,
+  bucketNames: string[],
+): number[] => {
+  if (interval !== 'month') {
+    return bucketNames.map((name) => window.moment(name).valueOf());
+  }
+
+  const ticks: number[] = [];
+  const currentDate = startDate.clone().startOf('month');
+  // Skip a leading partial month so the first tick is not drawn before the
+  // start of the axis. A start date that already falls on the 1st is kept.
+  if (currentDate.isBefore(startDate)) {
+    currentDate.add(1, 'month');
+  }
+  while (currentDate.isSameOrBefore(endDate)) {
+    ticks.push(currentDate.valueOf());
+    currentDate.add(1, 'month');
+  }
+  return ticks;
 };
 
 /**

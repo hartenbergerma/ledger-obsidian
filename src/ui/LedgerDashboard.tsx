@@ -190,10 +190,11 @@ const MobileDashboard: React.FC<{
     React.useState<ChartSegment | null>(null);
 
   // A selected chart segment refers to a specific point/bar, so it stops being
-  // meaningful once the date range or the set of accounts changes.
+  // meaningful once the date window (including live edits to a custom range) or
+  // the set of accounts changes.
   React.useEffect(() => {
     setSelectedSegment(null);
-  }, [dateRange, selectedAccounts]);
+  }, [dateRange, startDate, endDate, selectedAccounts]);
 
   // Clear the tag filter if the selected tag no longer exists (e.g. the last
   // transaction with that tag was deleted or had its tag changed). The recurring
@@ -216,7 +217,6 @@ const MobileDashboard: React.FC<{
       <DateRangeSelector
         range={dateRange}
         setRange={setDateRange}
-        firstDate={props.txCache.firstDate}
         customStart={customStartDate}
         customEnd={customEndDate}
         onCustomDatesChange={setCustomDates}
@@ -319,10 +319,11 @@ const DesktopDashboard: React.FC<{
     React.useState<ChartSegment | null>(null);
 
   // A selected chart segment refers to a specific point/bar, so it stops being
-  // meaningful once the date range or the set of accounts changes.
+  // meaningful once the date window (including live edits to a custom range) or
+  // the set of accounts changes.
   React.useEffect(() => {
     setSelectedSegment(null);
-  }, [dateRange, selectedAccounts]);
+  }, [dateRange, startDate, endDate, selectedAccounts]);
 
   // Clear the tag filter if the selected tag no longer exists (e.g. the last
   // transaction with that tag was deleted or had its tag changed). The recurring
@@ -346,7 +347,6 @@ const DesktopDashboard: React.FC<{
         <DateRangeSelector
           range={dateRange}
           setRange={setDateRange}
-          firstDate={props.txCache.firstDate}
           customStart={customStartDate}
           customEnd={customEndDate}
           onCustomDatesChange={setCustomDates}

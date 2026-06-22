@@ -1,6 +1,7 @@
 import { makeNetWorthData } from '../balance-utils';
 import {
   Interval,
+  makeAxisTicks,
   makeBucketNames,
   makeChartLabelFormatter,
 } from '../date-utils';
@@ -17,6 +18,8 @@ import { Moment } from 'moment';
 import React from 'react';
 import ChartistGraph from 'react-chartist';
 import styled from 'styled-components';
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 const Chart = styled.div`
   .ct-label {
@@ -77,16 +80,38 @@ export const NetWorthVisualization: React.FC<{
       ),
     [props.txCache],
   );
+
+  // Position each point at its true date on a numeric time axis and drop the
+  // buckets that fall before the first recorded transaction (their value is
+  // null). The axis ticks are placed at calendar boundaries independently, so
+  // a point on e.g. the 15th sits between two month ticks.
+  const points = makeNetWorthData(
+    props.dailyAccountBalanceMap,
+    dateBuckets,
+    netWorthAccounts,
+  )
+    .map((d, i) => ({
+      bucket: dateBuckets[i],
+      x: window.moment(dateBuckets[i]).valueOf(),
+      y: d.y,
+    }))
+    .filter((p): p is { bucket: string; x: number; y: number } => p.y !== null);
+  const visibleBuckets = points.map((p) => p.bucket);
+  const ticks = makeAxisTicks(
+    props.interval,
+    props.startDate,
+    props.endDate,
+    dateBuckets,
+  );
+
   const data = {
-    labels: dateBuckets,
-    series: [
-      makeNetWorthData(
-        props.dailyAccountBalanceMap,
-        dateBuckets,
-        netWorthAccounts,
-      ),
-    ],
+    series: [points.map((p) => ({ x: p.x, y: p.y }))],
   };
+
+  // Guard against a zero-width axis (start === end) which would make Chartist
+  // divide by zero when projecting points.
+  const low = props.startDate.valueOf();
+  const high = Math.max(props.endDate.valueOf(), low + MS_PER_DAY);
 
   const options: ILineChartOptions = {
     height: '300px',
@@ -94,11 +119,15 @@ export const NetWorthVisualization: React.FC<{
     showArea: false,
     showPoint: true,
     axisX: {
+      type: Chartist.FixedScaleAxis,
+      low,
+      high,
+      ticks,
       labelInterpolationFnc: makeChartLabelFormatter(
         props.interval,
-        dateBuckets.length,
+        ticks.length,
       ),
-    },
+    } as any,
   };
 
   const listener = useStableListener((dpoint) => {
@@ -126,11 +155,11 @@ export const NetWorthVisualization: React.FC<{
       // day before so that selecting it shows transactions on that opening day.
       const previousBoundary =
         dpoint.index > 0
-          ? window.moment(dateBuckets[dpoint.index - 1])
-          : window.moment(dateBuckets[0]).subtract(1, 'day');
+          ? window.moment(visibleBuckets[dpoint.index - 1])
+          : window.moment(visibleBuckets[0]).subtract(1, 'day');
       props.setSelectedSegment(
         makeChartSegment(
-          dateBuckets,
+          visibleBuckets,
           dpoint.index,
           previousBoundary,
           dpoint.value.y,

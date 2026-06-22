@@ -1,7 +1,7 @@
 import {
-  availableDateRangeOptions,
   bucketTransactions,
   chooseInterval,
+  makeAxisTicks,
   makeBucketNames,
   makeChartLabelFormatter,
   resolveDateRange,
@@ -41,9 +41,7 @@ describe('chooseInterval()', () => {
 describe('resolveDateRange()', () => {
   const firstTxDate = moment('2021-01-15');
   test.each([
-    ['week', 'day'],
     ['month', 'day'],
-    ['6months', 'week'],
     ['year', 'month'],
   ] as const)('%p range uses %p resolution', (range, interval) => {
     const result = resolveDateRange(range, firstTxDate);
@@ -154,38 +152,44 @@ describe('makeBucketNames()', () => {
   });
 });
 
-describe('availableDateRangeOptions()', () => {
-  const now = moment('2021-12-15');
-  test('recent data only offers all time', () => {
-    const result = availableDateRangeOptions(moment('2021-12-13'), now);
-    expect(result.map(({ id }) => id)).toEqual(['all']);
-  });
-  test('a couple weeks of data offers last week and all time', () => {
-    const result = availableDateRangeOptions(moment('2021-12-01'), now);
-    expect(result.map(({ id }) => id)).toEqual(['week', 'all']);
-  });
-  test('a few months of data offers up through last month', () => {
-    const result = availableDateRangeOptions(moment('2021-08-01'), now);
-    expect(result.map(({ id }) => id)).toEqual(['week', 'month', 'all']);
-  });
-  test('most of a year of data adds last six months', () => {
-    const result = availableDateRangeOptions(moment('2021-02-01'), now);
-    expect(result.map(({ id }) => id)).toEqual([
-      'week',
-      'month',
-      '6months',
-      'all',
+describe('makeAxisTicks()', () => {
+  test('month ticks fall on the first of each month within the range', () => {
+    const start = moment('2025-10-15');
+    const end = moment('2026-06-10');
+    const buckets = makeBucketNames('month', start, end);
+    const ticks = makeAxisTicks('month', start, end, buckets).map((t) =>
+      moment(t).format('YYYY-MM-DD'),
+    );
+    // The partial first (Oct 15) and last (Jun 10) days are not ticks; the
+    // month boundaries between them are.
+    expect(ticks).toEqual([
+      '2025-11-01',
+      '2025-12-01',
+      '2026-01-01',
+      '2026-02-01',
+      '2026-03-01',
+      '2026-04-01',
+      '2026-05-01',
+      '2026-06-01',
     ]);
   });
-  test('years of data offers every range', () => {
-    const result = availableDateRangeOptions(moment('2018-01-01'), now);
-    expect(result.map(({ id }) => id)).toEqual([
-      'week',
-      'month',
-      '6months',
-      'year',
-      'all',
-    ]);
+  test('a start on the first of a month is kept as a tick', () => {
+    const start = moment('2025-10-01');
+    const end = moment('2025-12-01');
+    const buckets = makeBucketNames('month', start, end);
+    const ticks = makeAxisTicks('month', start, end, buckets).map((t) =>
+      moment(t).format('YYYY-MM-DD'),
+    );
+    expect(ticks).toEqual(['2025-10-01', '2025-11-01', '2025-12-01']);
+  });
+  test('non-month intervals tick at the bucket dates', () => {
+    const start = moment('2021-12-01');
+    const end = moment('2021-12-03');
+    const buckets = makeBucketNames('day', start, end);
+    const ticks = makeAxisTicks('day', start, end, buckets).map((t) =>
+      moment(t).format('YYYY-MM-DD'),
+    );
+    expect(ticks).toEqual(buckets);
   });
 });
 

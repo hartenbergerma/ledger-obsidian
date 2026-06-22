@@ -1,4 +1,4 @@
-import { availableDateRangeOptions, DateRange } from '../date-utils';
+import { DateRange, dateRangeOptions } from '../date-utils';
 import { Button, DatePicker } from './SharedStyles';
 import { Moment } from 'moment';
 import React from 'react';
@@ -14,6 +14,9 @@ const SelectorContainer = styled.div`
   }
 `;
 
+// The custom date inputs live on their own full-width row so that on a narrow
+// (mobile) screen they wrap below the range buttons rather than squeezing in
+// beside them.
 const CustomDateRow = styled.div`
   width: 100%;
   display: flex;
@@ -30,44 +33,34 @@ const Separator = styled.span`
 export const DateRangeSelector: React.FC<{
   range: DateRange;
   setRange: (range: DateRange) => void;
-  firstDate: Moment;
-  customStart?: Moment;
-  customEnd?: Moment;
-  onCustomDatesChange?: (start: Moment, end: Moment) => void;
+  customStart: Moment;
+  customEnd: Moment;
+  onCustomDatesChange: (start: Moment, end: Moment) => void;
 }> = (props): JSX.Element => {
-  const [localStart, setLocalStart] = React.useState<string>(
-    () =>
-      props.customStart?.format('YYYY-MM-DD') ??
-      window.moment().subtract(1, 'month').format('YYYY-MM-DD'),
+  const [localStart, setLocalStart] = React.useState<string>(() =>
+    props.customStart.format('YYYY-MM-DD'),
   );
-  const [localEnd, setLocalEnd] = React.useState<string>(
-    () => props.customEnd?.format('YYYY-MM-DD') ?? window.moment().format('YYYY-MM-DD'),
+  const [localEnd, setLocalEnd] = React.useState<string>(() =>
+    props.customEnd.format('YYYY-MM-DD'),
   );
 
-  const options = React.useMemo(
-    () => availableDateRangeOptions(props.firstDate),
-    [props.firstDate],
-  );
-
-  // If the currently selected range is no longer available (e.g. the data is
-  // too recent to fill it), fall back to showing all transactions.
-  React.useEffect(() => {
-    if (!options.some(({ id }) => id === props.range)) {
-      props.setRange('all');
-    }
-  }, [options, props.range]);
-
-  const handleApply = (): void => {
-    const start = window.moment(localStart);
-    const end = window.moment(localEnd);
-    if (start.isValid() && end.isValid() && !start.isAfter(end)) {
-      props.onCustomDatesChange?.(start, end);
+  // Push the new dates up as soon as the user has entered a valid range. There
+  // is no apply button; the chart updates live just like the preset buttons.
+  const update = (start: string, end: string): void => {
+    const startMoment = window.moment(start, 'YYYY-MM-DD', true);
+    const endMoment = window.moment(end, 'YYYY-MM-DD', true);
+    if (
+      startMoment.isValid() &&
+      endMoment.isValid() &&
+      !startMoment.isAfter(endMoment)
+    ) {
+      props.onCustomDatesChange(startMoment, endMoment);
     }
   };
 
   return (
     <SelectorContainer className="ledger-daterange-selectors">
-      {options.map(({ id, label }) => (
+      {dateRangeOptions.map(({ id, label }) => (
         <Button
           key={id}
           selected={props.range === id}
@@ -82,17 +75,20 @@ export const DateRangeSelector: React.FC<{
           <DatePicker
             type="date"
             value={localStart}
-            onChange={(e) => setLocalStart(e.target.value)}
+            onChange={(e) => {
+              setLocalStart(e.target.value);
+              update(e.target.value, localEnd);
+            }}
           />
           <Separator>–</Separator>
           <DatePicker
             type="date"
             value={localEnd}
-            onChange={(e) => setLocalEnd(e.target.value)}
+            onChange={(e) => {
+              setLocalEnd(e.target.value);
+              update(localStart, e.target.value);
+            }}
           />
-          <Button selected={false} action={handleApply}>
-            Apply
-          </Button>
         </CustomDateRow>
       )}
     </SelectorContainer>
