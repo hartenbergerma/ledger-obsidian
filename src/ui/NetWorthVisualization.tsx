@@ -10,6 +10,7 @@ import {
   ChartSegment,
   formatExactValue,
   makeChartSegment,
+  splitXAxisLabel,
   useStableListener,
 } from './chartInteraction';
 import Chartist, { ILineChartOptions } from 'chartist';
@@ -24,7 +25,11 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const Chart = styled.div`
   .ct-label {
     color: var(--text-muted);
-    white-space: nowrap;
+  }
+
+  /* Allow two-line x-axis labels to extend below the SVG boundary. */
+  svg {
+    overflow: visible;
   }
 
   /*
@@ -132,6 +137,7 @@ export const NetWorthVisualization: React.FC<{
   };
 
   const listener = useStableListener((dpoint) => {
+    if (splitXAxisLabel(dpoint)) return;
     if (dpoint.type !== 'point') {
       return;
     }

@@ -14,6 +14,7 @@ import {
   formatChartValue,
   formatExactValue,
   makeChartSegment,
+  splitXAxisLabel,
   useStableListener,
 } from './chartInteraction';
 import Chartist, { IBarChartOptions, ILineChartOptions } from 'chartist';
@@ -72,7 +73,11 @@ const ChartTypeSelector = styled.div<{ $mobile: boolean }>`
 const Chart = styled.div<{ $mobile: boolean }>`
   .ct-label {
     color: var(--text-muted);
-    white-space: nowrap;
+  }
+
+  /* Allow two-line x-axis labels to extend below the SVG boundary. */
+  svg {
+    overflow: visible;
   }
 
   /*
@@ -266,6 +271,7 @@ const BalanceVisualization: React.FC<{
   };
 
   const listener = useStableListener((dpoint) => {
+    if (splitXAxisLabel(dpoint)) return;
     if (dpoint.type !== 'point') {
       return;
     }
@@ -358,6 +364,7 @@ const DeltaVisualization: React.FC<{
   };
 
   const listener = useStableListener((dpoint) => {
+    if (splitXAxisLabel(dpoint)) return;
     if (dpoint.type !== 'bar') {
       return;
     }
