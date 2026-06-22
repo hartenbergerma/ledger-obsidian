@@ -71,13 +71,18 @@ export const makeChartLabelFormatter =
     if (index % everyNth !== 0) {
       return null;
     }
-    const format = interval === 'month' ? 'MMM YYYY' : 'MMM D';
+    const format = interval === 'month' ? 'MMM YY' : 'MMM D';
     return window.moment(value).format(format);
   };
 
 /**
  * makeBucketNames creates a list of dates at the provided interval between the
  * startDate and the endDate.
+ *
+ * For the month interval, intermediate buckets snap to the 1st of each
+ * calendar month so they align with the axis tick marks. Only the first bucket
+ * (startDate) and last bucket (endDate) can fall on arbitrary days. For all
+ * other intervals the buckets step uniformly from the startDate.
  */
 export const makeBucketNames = (
   interval: Interval,
@@ -85,18 +90,23 @@ export const makeBucketNames = (
   endDate: Moment,
 ): string[] => {
   const names: string[] = [];
-  const currentDate = startDate.clone();
+  names.push(startDate.format('YYYY-MM-DD'));
 
-  do {
-    names.push(currentDate.format('YYYY-MM-DD'));
-    currentDate.add(1, interval);
-  } while (currentDate.isSameOrBefore(endDate));
+  if (interval === 'month') {
+    const currentDate = startDate.clone().startOf('month').add(1, 'month');
+    while (currentDate.isBefore(endDate)) {
+      names.push(currentDate.format('YYYY-MM-DD'));
+      currentDate.add(1, 'month');
+    }
+  } else {
+    const currentDate = startDate.clone().add(1, interval);
+    while (currentDate.isBefore(endDate)) {
+      names.push(currentDate.format('YYYY-MM-DD'));
+      currentDate.add(1, interval);
+    }
+  }
 
-  // Always include the end of the range as the final bucket. When the range
-  // does not divide evenly into the interval, the last generated bucket falls
-  // before the end date. Previously this caused transactions occurring after
-  // that bucket (e.g. in the most recent days) to be omitted from the chart,
-  // even though they appeared in the transaction list below.
+  // Always include the end date as the final bucket, deduplicated.
   const endName = endDate.format('YYYY-MM-DD');
   if (names[names.length - 1] !== endName) {
     names.push(endName);

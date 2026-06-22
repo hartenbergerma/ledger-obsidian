@@ -72,9 +72,9 @@ describe('makeChartLabelFormatter()', () => {
     expect(formatter('2021-12-02', 1)).toBeNull();
     expect(formatter('2021-12-04', 3)).toEqual('Dec 4');
   });
-  test('formats month buckets with the year', () => {
+  test('formats month buckets with the short year', () => {
     const formatter = makeChartLabelFormatter('month', 12);
-    expect(formatter('2021-12-01', 0)).toEqual('Dec 2021');
+    expect(formatter('2021-12-01', 0)).toEqual('Dec 21');
   });
 });
 
@@ -148,6 +148,28 @@ describe('makeBucketNames()', () => {
         moment('2021-12-01'),
       );
       expect(result).toEqual(['2021-10-01', '2021-11-01', '2021-12-01']);
+    });
+    test('snaps intermediate buckets to month starts for an off-boundary start', () => {
+      // Only the first (Oct 15) and last (Jun 10) buckets are off a month
+      // boundary; everything in between falls on the 1st so the points line up
+      // with the axis ticks.
+      const result = makeBucketNames(
+        'month',
+        moment('2025-10-15'),
+        moment('2026-06-10'),
+      );
+      expect(result).toEqual([
+        '2025-10-15',
+        '2025-11-01',
+        '2025-12-01',
+        '2026-01-01',
+        '2026-02-01',
+        '2026-03-01',
+        '2026-04-01',
+        '2026-05-01',
+        '2026-06-01',
+        '2026-06-10',
+      ]);
     });
   });
 });

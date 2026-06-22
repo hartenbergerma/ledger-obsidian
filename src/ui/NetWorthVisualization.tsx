@@ -24,6 +24,7 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const Chart = styled.div`
   .ct-label {
     color: var(--text-muted);
+    white-space: nowrap;
   }
 
   /*

@@ -72,6 +72,7 @@ const ChartTypeSelector = styled.div<{ $mobile: boolean }>`
 const Chart = styled.div<{ $mobile: boolean }>`
   .ct-label {
     color: var(--text-muted);
+    white-space: nowrap;
   }
 
   /*

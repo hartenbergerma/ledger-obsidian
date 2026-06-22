@@ -5,7 +5,12 @@ import {
   Operation,
   RecurringAcceptModal,
 } from './modals';
-import { EnhancedTransaction, parse, TransactionCache } from './parser';
+import {
+  EnhancedTransaction,
+  FileBlock,
+  parse,
+  TransactionCache,
+} from './parser';
 import {
   advanceSchedule,
   effectiveDueDate,
@@ -73,6 +78,64 @@ export class LedgerModifier {
       '\n' +
       lines.slice(oldTx.block.lastLine + 1).join('\n');
     return vault.modify(this.ledgerFile, newLines);
+  }
+
+  /**
+   * makeTransactionRecurring turns an existing transaction into a recurring one.
+   * The transaction is rewritten in place (e.g. to add the recurring marker tag)
+   * and its schedule is saved. When the schedule already exists (rt.block is
+   * set) both the transaction and the schedule block are rewritten from a single
+   * snapshot of the file so their line indices stay consistent; otherwise the
+   * new schedule is inserted after the transaction is updated.
+   */
+  public async makeTransactionRecurring(
+    oldTx: EnhancedTransaction,
+    newTxStr: string,
+    rt: RecurringTransaction,
+  ): Promise<void> {
+    if (rt.block) {
+      const scheduleText = formatRecurringTransaction(
+        rt,
+        this.plugin.settings.currencySymbol,
+      );
+      await this.replaceBlocks([
+        { block: oldTx.block, text: newTxStr },
+        { block: rt.block, text: scheduleText },
+      ]);
+      return;
+    }
+    await this.updateTransaction(oldTx, newTxStr);
+    await this.saveRecurring(rt);
+  }
+
+  /**
+   * replaceBlocks replaces several blocks in a single read/modify so that the
+   * stored line indices all refer to the same snapshot of the file. The edits
+   * are applied from the bottom of the file upward so that replacing one block
+   * does not shift the line numbers of the blocks above it.
+   */
+  private async replaceBlocks(
+    edits: { block: FileBlock; text: string }[],
+  ): Promise<void> {
+    const vault = this.plugin.app.vault;
+    let lines = (await vault.read(this.ledgerFile)).split('\n');
+    const ordered = [...edits].sort(
+      (a, b) => b.block.firstLine - a.block.firstLine,
+    );
+    ordered.forEach(({ block, text }) => {
+      const insert = text.split('\n');
+      // formatTransaction prefixes a leading newline (used as a separator when
+      // splicing strings); drop the resulting empty first line here.
+      if (insert[0] === '') {
+        insert.shift();
+      }
+      lines = [
+        ...lines.slice(0, block.firstLine),
+        ...insert,
+        ...lines.slice(block.lastLine + 1),
+      ];
+    });
+    await vault.modify(this.ledgerFile, lines.join('\n'));
   }
 
   /**
