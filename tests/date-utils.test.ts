@@ -83,12 +83,14 @@ describe('makeBucketNames()', () => {
   // transactions are represented in the chart, even when the range does not
   // divide evenly into the interval.
   describe('week', () => {
+    // Dec 1 2021 is a Wednesday; intermediate buckets snap to Mondays.
     test('less than a week', () => {
       const result = makeBucketNames(
         'week',
         moment('2021-12-01'),
         moment('2021-12-03'),
       );
+      // Dec 6 (first Monday) is after the end date, so no intermediate bucket.
       expect(result).toEqual(['2021-12-01', '2021-12-03']);
     });
     test('exactly a week', () => {
@@ -97,7 +99,8 @@ describe('makeBucketNames()', () => {
         moment('2021-12-01'),
         moment('2021-12-07'),
       );
-      expect(result).toEqual(['2021-12-01', '2021-12-07']);
+      // Dec 6 (Monday) is before Dec 7, so it is included.
+      expect(result).toEqual(['2021-12-01', '2021-12-06', '2021-12-07']);
     });
     test('exactly 8 days', () => {
       const result = makeBucketNames(
@@ -105,9 +108,11 @@ describe('makeBucketNames()', () => {
         moment('2021-12-01'),
         moment('2021-12-08'),
       );
-      expect(result).toEqual(['2021-12-01', '2021-12-08']);
+      // Dec 6 (Monday) is included; Dec 13 is after the end date.
+      expect(result).toEqual(['2021-12-01', '2021-12-06', '2021-12-08']);
     });
     test('longer', () => {
+      // Nov 1 2021 is a Monday, so intermediate buckets are just the next Mondays.
       const result = makeBucketNames(
         'week',
         moment('2021-11-01'),
@@ -121,6 +126,21 @@ describe('makeBucketNames()', () => {
         '2021-11-29',
         '2021-12-06',
         '2021-12-08',
+      ]);
+    });
+    test('snaps intermediate buckets to Mondays for an off-boundary start', () => {
+      // Dec 1 (Wednesday) → Dec 22 (Wednesday); Mondays in between: 6, 13, 20.
+      const result = makeBucketNames(
+        'week',
+        moment('2021-12-01'),
+        moment('2021-12-22'),
+      );
+      expect(result).toEqual([
+        '2021-12-01',
+        '2021-12-06',
+        '2021-12-13',
+        '2021-12-20',
+        '2021-12-22',
       ]);
     });
   });
@@ -204,7 +224,7 @@ describe('makeAxisTicks()', () => {
     );
     expect(ticks).toEqual(['2025-10-01', '2025-11-01', '2025-12-01']);
   });
-  test('non-month intervals tick at the bucket dates', () => {
+  test('day interval ticks at the bucket dates', () => {
     const start = moment('2021-12-01');
     const end = moment('2021-12-03');
     const buckets = makeBucketNames('day', start, end);
@@ -212,6 +232,26 @@ describe('makeAxisTicks()', () => {
       moment(t).format('YYYY-MM-DD'),
     );
     expect(ticks).toEqual(buckets);
+  });
+  test('week ticks fall on Mondays within the range', () => {
+    // Dec 1 2021 is a Wednesday; Mondays in range: Dec 6, 13, 20.
+    const start = moment('2021-12-01');
+    const end = moment('2021-12-22');
+    const buckets = makeBucketNames('week', start, end);
+    const ticks = makeAxisTicks('week', start, end, buckets).map((t) =>
+      moment(t).format('YYYY-MM-DD'),
+    );
+    expect(ticks).toEqual(['2021-12-06', '2021-12-13', '2021-12-20']);
+  });
+  test('week ticks keep a Monday start as the first tick', () => {
+    // Nov 1 2021 is a Monday; it should appear as the first tick.
+    const start = moment('2021-11-01');
+    const end = moment('2021-11-22');
+    const buckets = makeBucketNames('week', start, end);
+    const ticks = makeAxisTicks('week', start, end, buckets).map((t) =>
+      moment(t).format('YYYY-MM-DD'),
+    );
+    expect(ticks).toEqual(['2021-11-01', '2021-11-08', '2021-11-15', '2021-11-22']);
   });
 });
 

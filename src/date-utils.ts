@@ -79,10 +79,11 @@ export const makeChartLabelFormatter =
  * makeBucketNames creates a list of dates at the provided interval between the
  * startDate and the endDate.
  *
- * For the month interval, intermediate buckets snap to the 1st of each
- * calendar month so they align with the axis tick marks. Only the first bucket
- * (startDate) and last bucket (endDate) can fall on arbitrary days. For all
- * other intervals the buckets step uniformly from the startDate.
+ * For month and week intervals, intermediate buckets snap to calendar
+ * boundaries (1st of each month / Monday of each ISO week) so they align with
+ * the axis tick marks. Only the first bucket (startDate) and last bucket
+ * (endDate) can fall on arbitrary days. For day intervals the buckets step
+ * uniformly from the startDate.
  */
 export const makeBucketNames = (
   interval: Interval,
@@ -97,6 +98,12 @@ export const makeBucketNames = (
     while (currentDate.isBefore(endDate)) {
       names.push(currentDate.format('YYYY-MM-DD'));
       currentDate.add(1, 'month');
+    }
+  } else if (interval === 'week') {
+    const currentDate = startDate.clone().startOf('isoWeek').add(1, 'week');
+    while (currentDate.isBefore(endDate)) {
+      names.push(currentDate.format('YYYY-MM-DD'));
+      currentDate.add(1, 'week');
     }
   } else {
     const currentDate = startDate.clone().add(1, interval);
@@ -122,7 +129,9 @@ export const makeBucketNames = (
  * at the data points themselves:
  *  - month: the first of each month within the range, so a point on e.g. the
  *    15th sits halfway between two month ticks instead of on top of one.
- *  - week/day: the bucket dates themselves, which are already evenly spaced.
+ *  - week: Monday of each ISO week within the range, so off-week-start points
+ *    sit between ticks.
+ *  - day: the bucket dates themselves, which are already evenly spaced.
  */
 export const makeAxisTicks = (
   interval: Interval,
@@ -130,10 +139,26 @@ export const makeAxisTicks = (
   endDate: Moment,
   bucketNames: string[],
 ): number[] => {
-  if (interval !== 'month') {
+  if (interval === 'day') {
     return bucketNames.map((name) => window.moment(name).valueOf());
   }
 
+  if (interval === 'week') {
+    const ticks: number[] = [];
+    const currentDate = startDate.clone().startOf('isoWeek');
+    // Skip a leading partial week so the first tick is not before the axis
+    // start. A start date that is already Monday is kept.
+    if (currentDate.isBefore(startDate)) {
+      currentDate.add(1, 'week');
+    }
+    while (currentDate.isSameOrBefore(endDate)) {
+      ticks.push(currentDate.valueOf());
+      currentDate.add(1, 'week');
+    }
+    return ticks;
+  }
+
+  // month
   const ticks: number[] = [];
   const currentDate = startDate.clone().startOf('month');
   // Skip a leading partial month so the first tick is not drawn before the
