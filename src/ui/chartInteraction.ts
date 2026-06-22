@@ -107,11 +107,16 @@ export const formatChartValue = (value: number, symbol: string): string => {
 
 /**
  * splitXAxisLabel intercepts a Chartist label draw event and, when the label
- * text contains a space, replaces the single-line SVG text node with two tspan
- * children: the text before the last space on top, the text after it on the
- * bottom. Both tspans share the parent's x coordinate so they stay centered on
- * their tick. Returns true when a split was performed so callers can short-
- * circuit further processing.
+ * text contains a space, replaces the single-line label with two lines: text
+ * before the last space on top, text after it on the bottom, centered on the
+ * tick. Returns true when a split was performed so callers can short-circuit
+ * further processing.
+ *
+ * Chartist renders axis labels as either:
+ *  - a plain SVG <text> element (older environments), or
+ *  - a <foreignObject> containing an HTML <div> (modern Electron/Chromium,
+ *    where document.implementation.hasFeature always returns true).
+ * Both cases are handled here.
  */
 export const splitXAxisLabel = (dpoint: any): boolean => {
   if (dpoint.type !== 'label') return false;
@@ -122,27 +127,41 @@ export const splitXAxisLabel = (dpoint: any): boolean => {
 
   const top = text.slice(0, spaceIdx);
   const bottom = text.slice(spaceIdx + 1);
-  const svgEl = dpoint.element.getNode() as SVGTextElement;
-  const x = svgEl.getAttribute('x') ?? '0';
-  svgEl.textContent = '';
+  const el = dpoint.element.getNode() as Element;
+  const nodeName = el.nodeName.toLowerCase();
 
-  const addTspan = (label: string, dy: string): void => {
-    const tspan = document.createElementNS(
-      'http://www.w3.org/2000/svg',
-      'tspan',
-    );
-    tspan.setAttribute('x', x);
-    tspan.setAttribute('dy', dy);
-    tspan.textContent = label;
-    svgEl.appendChild(tspan);
-  };
+  if (nodeName === 'foreignobject') {
+    // Modern Electron/Chromium: label is an HTML <div> inside a <foreignObject>.
+    const div = el.querySelector('div');
+    if (div) {
+      div.innerHTML = `${top}<br>${bottom}`;
+      div.style.textAlign = 'center';
+    }
+    return true;
+  }
 
-  // Shift the first line up and the second line down so the pair is visually
-  // centered where the original single-line label would have been.
-  addTspan(top, '-0.5em');
-  addTspan(bottom, '1.2em');
+  if (nodeName === 'text') {
+    // Plain SVG <text>: replace content with two <tspan> children.
+    const x = el.getAttribute('x') ?? '0';
+    el.textContent = '';
+    const addTspan = (label: string, dy: string): void => {
+      const tspan = document.createElementNS(
+        'http://www.w3.org/2000/svg',
+        'tspan',
+      );
+      tspan.setAttribute('x', x);
+      tspan.setAttribute('dy', dy);
+      tspan.textContent = label;
+      el.appendChild(tspan);
+    };
+    // Shift the first line up and the second down so the pair is centered
+    // where the original single-line label would have been.
+    addTspan(top, '-0.5em');
+    addTspan(bottom, '1.2em');
+    return true;
+  }
 
-  return true;
+  return false;
 };
 
 /**
