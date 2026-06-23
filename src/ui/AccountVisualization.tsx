@@ -75,14 +75,6 @@ const Chart = styled.div<{ $mobile: boolean }>`
     color: var(--text-muted);
   }
 
-  /* Shift the label left by half its container width so it is centered under
-     the tick mark (the foreignObject starts at the tick, not centered on it). */
-  .ct-chart-line .ct-label.ct-horizontal.ct-end {
-    justify-content: center;
-    text-align: center;
-    margin-left: -50%;
-  }
-
   /* Allow two-line x-axis labels to extend below the SVG boundary. */
   svg {
     overflow: visible;
@@ -266,6 +258,12 @@ const BalanceVisualization: React.FC<{
     width: '100%',
     showArea: false,
     showPoint: true,
+    // Widen the y-axis label gutter so currency labels (e.g. "$1,234.50") do
+    // not overflow into the plot area. Chartist's default offset of 40 is too
+    // narrow for formatted amounts.
+    axisY: {
+      offset: 65,
+    },
     axisX: {
       type: Chartist.FixedScaleAxis,
       low,
@@ -279,7 +277,7 @@ const BalanceVisualization: React.FC<{
   };
 
   const listener = useStableListener((dpoint) => {
-    if (splitXAxisLabel(dpoint, Platform.isMobile)) return;
+    if (splitXAxisLabel(dpoint)) return;
     if (dpoint.type !== 'point') {
       return;
     }
@@ -363,6 +361,11 @@ const DeltaVisualization: React.FC<{
     // them side by side becomes unreadable once more than two accounts are
     // selected, as the bars get too thin and overflow into each other.
     stackBars: true,
+    // Widen the y-axis label gutter so currency labels do not overflow into the
+    // plot area (Chartist's default offset of 40 is too narrow for amounts).
+    axisY: {
+      offset: 65,
+    },
     axisX: {
       labelInterpolationFnc: makeChartLabelFormatter(
         props.interval,
@@ -372,7 +375,7 @@ const DeltaVisualization: React.FC<{
   };
 
   const listener = useStableListener((dpoint) => {
-    if (splitXAxisLabel(dpoint, Platform.isMobile)) return;
+    if (splitXAxisLabel(dpoint)) return;
     if (dpoint.type !== 'bar') {
       return;
     }

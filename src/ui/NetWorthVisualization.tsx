@@ -16,7 +16,6 @@ import {
 import Chartist, { ILineChartOptions } from 'chartist';
 import { union } from 'lodash';
 import { Moment } from 'moment';
-import { Platform } from 'obsidian';
 import React from 'react';
 import ChartistGraph from 'react-chartist';
 import styled from 'styled-components';
@@ -26,14 +25,6 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const Chart = styled.div`
   .ct-label {
     color: var(--text-muted);
-  }
-
-  /* Shift the label left by half its container width so it is centered under
-     the tick mark (the foreignObject starts at the tick, not centered on it). */
-  .ct-chart-line .ct-label.ct-horizontal.ct-end {
-    justify-content: center;
-    text-align: center;
-    margin-left: -50%;
   }
 
   /* Allow two-line x-axis labels to extend below the SVG boundary. */
@@ -133,6 +124,12 @@ export const NetWorthVisualization: React.FC<{
     width: '100%',
     showArea: false,
     showPoint: true,
+    // Widen the y-axis label gutter so currency labels (e.g. "$1,234.50") do
+    // not overflow into the plot area. Chartist's default offset of 40 is too
+    // narrow for formatted amounts.
+    axisY: {
+      offset: 65,
+    },
     axisX: {
       type: Chartist.FixedScaleAxis,
       low,
@@ -146,7 +143,7 @@ export const NetWorthVisualization: React.FC<{
   };
 
   const listener = useStableListener((dpoint) => {
-    if (splitXAxisLabel(dpoint, Platform.isMobile)) return;
+    if (splitXAxisLabel(dpoint)) return;
     if (dpoint.type !== 'point') {
       return;
     }

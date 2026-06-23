@@ -283,17 +283,6 @@ Chartist Stylesheet
   text-align: center;
   text-anchor: start;
 }
-/* Line chart tick labels: shift left by half the foreignObject width so the
-   text is centered under the tick mark rather than starting at it. */
-.ct-chart-line .ct-label.ct-horizontal.ct-end {
-  -webkit-box-pack: center;
-  -webkit-justify-content: center;
-  -ms-flex-pack: center;
-  justify-content: center;
-  text-align: center;
-  text-anchor: middle;
-  margin-left: -50%;
-}
 .ct-chart-bar.ct-horizontal-bars .ct-label.ct-horizontal.ct-start {
   -webkit-box-align: flex-end;
   -webkit-align-items: flex-end;

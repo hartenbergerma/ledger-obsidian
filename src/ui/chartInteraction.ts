@@ -117,23 +117,25 @@ export const formatChartValue = (value: number, symbol: string): string => {
 };
 
 /**
- * splitXAxisLabel intercepts a Chartist label draw event and, when running on
- * mobile, replaces the single-line label with two lines (text before the last
- * space on top, text after it below) centered on the tick. On desktop labels
- * stay single-line because there is enough horizontal room. Returns true when
- * the event was handled (whether or not a split occurred) so callers can
- * short-circuit further processing.
+ * splitXAxisLabel intercepts a Chartist x-axis label draw event and replaces
+ * the single-line label with two lines, breaking before the last space (e.g.
+ * the day number for days, or the year for months). It also centers the label
+ * on its tick. Returns true when the event was an x-axis label (so callers can
+ * short-circuit further processing).
  *
  * Chartist renders axis labels as either:
- *  - a plain SVG <text> element (older environments), or
- *  - a <foreignObject> containing an HTML <div> (modern Electron/Chromium,
- *    where document.implementation.hasFeature always returns true).
- * Both cases are handled here.
+ *  - a <foreignObject> wrapping an HTML <span> (modern Electron/Chromium,
+ *    where document.implementation.hasFeature always returns true), or
+ *  - a plain SVG <text> element (older environments).
+ *
+ * Centering differs by chart type. For line charts (FixedScaleAxis) the label
+ * box's left edge sits on the tick, so we shift the content left by half its
+ * width (translateX(-50%)) to center it. For bar charts (StepAxis) the box
+ * already brackets the bar, so centering the text within the box is enough.
  */
-export const splitXAxisLabel = (dpoint: any, mobile: boolean): boolean => {
+export const splitXAxisLabel = (dpoint: any): boolean => {
   if (dpoint.type !== 'label') return false;
   if (dpoint.axis?.units?.pos !== 'x') return false;
-  if (!mobile) return false;
 
   const text: string = dpoint.text ?? '';
   const spaceIdx = text.lastIndexOf(' ');
@@ -145,18 +147,26 @@ export const splitXAxisLabel = (dpoint: any, mobile: boolean): boolean => {
   const nodeName = el.nodeName.toLowerCase();
 
   if (nodeName === 'foreignobject') {
-    // Modern Electron/Chromium: label is an HTML <div> inside a <foreignObject>.
-    const div = el.querySelector('div');
-    if (div) {
-      div.innerHTML = `${top}<br>${bottom}`;
-      div.style.textAlign = 'center';
+    // The label content is the <span> child of the foreignObject. Replace its
+    // text with two lines and center it on the tick.
+    const content = el.firstElementChild as HTMLElement | null;
+    if (content) {
+      content.innerHTML = `${top}<br>${bottom}`;
+      content.style.display = 'block';
+      content.style.textAlign = 'center';
+      // Only line charts need the half-width shift (see doc comment above).
+      if (el.closest('.ct-chart-line')) {
+        content.style.transform = 'translateX(-50%)';
+      }
     }
     return true;
   }
 
   if (nodeName === 'text') {
-    // Plain SVG <text>: replace content with two <tspan> children.
+    // Plain SVG <text>: replace content with two <tspan> children, centered on
+    // the tick via text-anchor.
     const x = el.getAttribute('x') ?? '0';
+    el.setAttribute('text-anchor', 'middle');
     el.textContent = '';
     const addTspan = (label: string, dy: string): void => {
       const tspan = document.createElementNS(

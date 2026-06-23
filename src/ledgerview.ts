@@ -22,7 +22,7 @@ export class LedgerView extends TextFileView {
     this.currentFilePath = null;
     this.updateInterface = null;
 
-    this.addAction('plus', 'Add to Ledger', () => {
+    this.addAction('ledger', 'Add to Ledger', () => {
       this.updateInterface?.openExpenseModal('new');
     });
 
