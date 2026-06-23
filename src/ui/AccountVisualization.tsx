@@ -75,6 +75,11 @@ const Chart = styled.div<{ $mobile: boolean }>`
     color: var(--text-muted);
   }
 
+  .ct-label.ct-horizontal.ct-end {
+    justify-content: center;
+    text-align: center;
+  }
+
   /* Allow two-line x-axis labels to extend below the SVG boundary. */
   svg {
     overflow: visible;
@@ -271,7 +276,7 @@ const BalanceVisualization: React.FC<{
   };
 
   const listener = useStableListener((dpoint) => {
-    if (splitXAxisLabel(dpoint)) return;
+    if (splitXAxisLabel(dpoint, Platform.isMobile)) return;
     if (dpoint.type !== 'point') {
       return;
     }
@@ -364,7 +369,7 @@ const DeltaVisualization: React.FC<{
   };
 
   const listener = useStableListener((dpoint) => {
-    if (splitXAxisLabel(dpoint)) return;
+    if (splitXAxisLabel(dpoint, Platform.isMobile)) return;
     if (dpoint.type !== 'bar') {
       return;
     }

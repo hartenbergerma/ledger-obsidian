@@ -61,8 +61,19 @@ export const makeChartSegment = (
   value: number,
   interval: Interval,
 ): ChartSegment => {
-  const filterEnd = window.moment(buckets[index]);
-  const filterStart = previousBoundary.clone().add(1, 'day');
+  let filterEnd = window.moment(buckets[index]);
+  let filterStart = previousBoundary.clone().add(1, 'day');
+  if (interval === 'month' && index > 0) {
+    if (filterEnd.date() === 1) {
+      // Bucket lands on the 1st: it represents the complete preceding calendar
+      // month, so shift the window back to 1st–last of that month.
+      filterEnd = filterEnd.clone().subtract(1, 'day');
+      filterStart = filterEnd.clone().startOf('month');
+    } else {
+      // Partial month at the end of the range: show from the 1st of that month.
+      filterStart = filterEnd.clone().startOf('month');
+    }
+  }
   return {
     index,
     filterStart,
@@ -106,11 +117,12 @@ export const formatChartValue = (value: number, symbol: string): string => {
 };
 
 /**
- * splitXAxisLabel intercepts a Chartist label draw event and, when the label
- * text contains a space, replaces the single-line label with two lines: text
- * before the last space on top, text after it on the bottom, centered on the
- * tick. Returns true when a split was performed so callers can short-circuit
- * further processing.
+ * splitXAxisLabel intercepts a Chartist label draw event and, when running on
+ * mobile, replaces the single-line label with two lines (text before the last
+ * space on top, text after it below) centered on the tick. On desktop labels
+ * stay single-line because there is enough horizontal room. Returns true when
+ * the event was handled (whether or not a split occurred) so callers can
+ * short-circuit further processing.
  *
  * Chartist renders axis labels as either:
  *  - a plain SVG <text> element (older environments), or
@@ -118,9 +130,11 @@ export const formatChartValue = (value: number, symbol: string): string => {
  *    where document.implementation.hasFeature always returns true).
  * Both cases are handled here.
  */
-export const splitXAxisLabel = (dpoint: any): boolean => {
+export const splitXAxisLabel = (dpoint: any, mobile: boolean): boolean => {
   if (dpoint.type !== 'label') return false;
   if (dpoint.axis?.units?.pos !== 'x') return false;
+  if (!mobile) return false;
+
   const text: string = dpoint.text ?? '';
   const spaceIdx = text.lastIndexOf(' ');
   if (spaceIdx < 0) return false;

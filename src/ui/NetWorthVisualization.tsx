@@ -16,6 +16,7 @@ import {
 import Chartist, { ILineChartOptions } from 'chartist';
 import { union } from 'lodash';
 import { Moment } from 'moment';
+import { Platform } from 'obsidian';
 import React from 'react';
 import ChartistGraph from 'react-chartist';
 import styled from 'styled-components';
@@ -25,6 +26,11 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const Chart = styled.div`
   .ct-label {
     color: var(--text-muted);
+  }
+
+  .ct-label.ct-horizontal.ct-end {
+    justify-content: center;
+    text-align: center;
   }
 
   /* Allow two-line x-axis labels to extend below the SVG boundary. */
@@ -137,7 +143,7 @@ export const NetWorthVisualization: React.FC<{
   };
 
   const listener = useStableListener((dpoint) => {
-    if (splitXAxisLabel(dpoint)) return;
+    if (splitXAxisLabel(dpoint, Platform.isMobile)) return;
     if (dpoint.type !== 'point') {
       return;
     }

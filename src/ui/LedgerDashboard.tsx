@@ -46,6 +46,7 @@ export const LedgerDashboard: React.FC<{
   settings: ISettings;
   txCache: TransactionCache;
   updater: LedgerModifier;
+  openLedger?: () => void;
 }> = (props): JSX.Element => {
   const [tutorialIndex, setTutorialIndex] = React.useState(props.tutorialIndex);
   const setTutorialIndexWrapper = (index: number): void => {
@@ -62,6 +63,7 @@ export const LedgerDashboard: React.FC<{
       settings={props.settings}
       txCache={props.txCache}
       updater={props.updater}
+      openLedger={props.openLedger}
     />
   ) : (
     <DesktopDashboard
@@ -70,6 +72,7 @@ export const LedgerDashboard: React.FC<{
       settings={props.settings}
       txCache={props.txCache}
       updater={props.updater}
+      openLedger={props.openLedger}
     />
   );
 };
@@ -169,6 +172,7 @@ const MobileDashboard: React.FC<{
   settings: ISettings;
   txCache: TransactionCache;
   updater: LedgerModifier;
+  openLedger?: () => void;
 }> = (props): JSX.Element => {
   const dailyAccountBalanceMap = useDailyAccountBalanceMap(props.txCache);
   const {
@@ -221,6 +225,13 @@ const MobileDashboard: React.FC<{
         customEnd={customEndDate}
         onCustomDatesChange={setCustomDates}
       />
+
+      <button onClick={() => props.updater.openExpenseModal('new')}>
+        Add to Ledger
+      </button>
+      {props.openLedger ? (
+        <button onClick={props.openLedger}>Open Ledger</button>
+      ) : null}
 
       <button
         className="ledger-mobile-account-toggle"
@@ -299,6 +310,7 @@ const DesktopDashboard: React.FC<{
   settings: ISettings;
   txCache: TransactionCache;
   updater: LedgerModifier;
+  openLedger?: () => void;
 }> = (props): JSX.Element => {
   const dailyAccountBalanceMap = useDailyAccountBalanceMap(props.txCache);
   const {
@@ -351,6 +363,12 @@ const DesktopDashboard: React.FC<{
           customEnd={customEndDate}
           onCustomDatesChange={setCustomDates}
         />
+        <button onClick={() => props.updater.openExpenseModal('new')}>
+          Add to Ledger
+        </button>
+        {props.openLedger ? (
+          <button onClick={props.openLedger}>Open Ledger</button>
+        ) : null}
         {props.tutorialIndex !== -1 ? (
           <Tutorial
             tutorialIndex={props.tutorialIndex}
