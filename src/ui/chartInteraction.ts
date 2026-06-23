@@ -155,7 +155,9 @@ export const splitXAxisLabel = (dpoint: any): boolean => {
       content.style.display = 'block';
       content.style.textAlign = 'center';
       // Only line charts need the half-width shift (see doc comment above).
-      if (el.closest('.ct-chart-line')) {
+      // The first tick (index 0) sits at the left edge of the plot area; shifting
+      // it left by 50% would push it into the y-axis gutter, so skip the shift.
+      if (el.closest('.ct-chart-line') && dpoint.index > 0) {
         content.style.transform = 'translateX(-50%)';
       }
     }
@@ -164,9 +166,9 @@ export const splitXAxisLabel = (dpoint: any): boolean => {
 
   if (nodeName === 'text') {
     // Plain SVG <text>: replace content with two <tspan> children, centered on
-    // the tick via text-anchor.
+    // the tick via text-anchor. First tick: left-align to stay inside the plot.
     const x = el.getAttribute('x') ?? '0';
-    el.setAttribute('text-anchor', 'middle');
+    el.setAttribute('text-anchor', dpoint.index === 0 ? 'start' : 'middle');
     el.textContent = '';
     const addTspan = (label: string, dy: string): void => {
       const tspan = document.createElementNS(

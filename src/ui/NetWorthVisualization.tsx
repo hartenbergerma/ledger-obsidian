@@ -128,7 +128,7 @@ export const NetWorthVisualization: React.FC<{
     // not overflow into the plot area. Chartist's default offset of 40 is too
     // narrow for formatted amounts.
     axisY: {
-      offset: 65,
+      offset: 80,
     },
     axisX: {
       type: Chartist.FixedScaleAxis,
