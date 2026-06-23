@@ -22,6 +22,10 @@ export class LedgerView extends TextFileView {
     this.currentFilePath = null;
     this.updateInterface = null;
 
+    this.addAction('plus', 'Add to Ledger', () => {
+      this.updateInterface?.openExpenseModal('new');
+    });
+
     this.addAction('pencil', 'Switch to Markdown View', () => {
       const state = leaf.view.getState();
       leaf.setViewState(
@@ -123,7 +127,6 @@ export class LedgerView extends TextFileView {
           settings: this.plugin.settings,
           txCache: this.txCache,
           updater: this.updateInterface,
-          openLedger: this.openLedger,
         }),
         this.contentEl,
       );
@@ -132,19 +135,6 @@ export class LedgerView extends TextFileView {
       const span = contentEl.createSpan();
       span.setText('Loading...');
     }
-  };
-
-  private readonly openLedger = (): void => {
-    const leaf = this.leaf;
-    const state = leaf.view.getState();
-    leaf.setViewState(
-      {
-        type: 'markdown',
-        state,
-        popstate: true,
-      } as ViewState,
-      { focus: true },
-    );
   };
 
   private readonly setTutorialIndex = (index: number): void => {

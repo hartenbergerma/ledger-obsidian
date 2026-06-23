@@ -28,9 +28,12 @@ const Chart = styled.div`
     color: var(--text-muted);
   }
 
-  .ct-label.ct-horizontal.ct-end {
+  /* Shift the label left by half its container width so it is centered under
+     the tick mark (the foreignObject starts at the tick, not centered on it). */
+  .ct-chart-line .ct-label.ct-horizontal.ct-end {
     justify-content: center;
     text-align: center;
+    margin-left: -50%;
   }
 
   /* Allow two-line x-axis labels to extend below the SVG boundary. */
