@@ -91,6 +91,16 @@ const Chart = styled.div<{ $mobile: boolean }>`
     stroke-dasharray: 2px;
   }
 
+  /* Restore Chartist's intended right-alignment for y-axis labels (see
+  NetWorthVisualization for a full explanation). */
+  .ct-label.ct-vertical.ct-start {
+    display: flex !important;
+    justify-content: flex-end !important;
+    align-items: center !important;
+    text-align: right !important;
+    white-space: nowrap !important;
+  }
+
   .ct-point,
   .ct-bar {
     cursor: pointer;
@@ -259,12 +269,10 @@ const BalanceVisualization: React.FC<{
     width: '100%',
     showArea: false,
     showPoint: true,
-    // Reserve a wider gutter for the y-axis labels than Chartist's default of
-    // 40, which is too narrow for formatted amounts. The labels are kept
-    // right-aligned within this gutter by alignYAxisLabel so they never spill
-    // into the plot area.
     axisY: {
-      offset: 60,
+      labelInterpolationFnc: (value: number) =>
+        formatChartValue(value, props.currencySymbol),
+      offset: 50,
     },
     axisX: {
       type: Chartist.FixedScaleAxis,
@@ -364,11 +372,10 @@ const DeltaVisualization: React.FC<{
     // them side by side becomes unreadable once more than two accounts are
     // selected, as the bars get too thin and overflow into each other.
     stackBars: true,
-    // Reserve a wider gutter for the y-axis labels than Chartist's default of
-    // 40. The labels are kept right-aligned within this gutter by
-    // alignYAxisLabel so they never spill into the plot area.
     axisY: {
-      offset: 60,
+      labelInterpolationFnc: (value: number) =>
+        formatChartValue(value, props.currencySymbol),
+      offset: 50,
     },
     axisX: {
       labelInterpolationFnc: makeChartLabelFormatter(

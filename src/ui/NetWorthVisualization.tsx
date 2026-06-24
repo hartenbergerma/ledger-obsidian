@@ -9,6 +9,7 @@ import { TransactionCache } from '../parser';
 import {
   alignYAxisLabel,
   ChartSegment,
+  formatChartValue,
   formatExactValue,
   makeChartSegment,
   splitXAxisLabel,
@@ -41,6 +42,22 @@ const Chart = styled.div`
     stroke: var(--background-modifier-border);
     stroke-width: 1px;
     stroke-dasharray: 2px;
+  }
+
+  /*
+  Restore Chartist's intended right-alignment for y-axis labels. Obsidian's
+  global CSS overrides the Chartist-bundled .ct-label.ct-vertical.ct-start
+  rule, making labels left-aligned so they spill into the plot area. Scoping
+  this rule inside the styled-component class raises its specificity above any
+  single-class selector in the theme. !important is needed only as a fallback
+  against theme rules that already use it.
+  */
+  .ct-label.ct-vertical.ct-start {
+    display: flex !important;
+    justify-content: flex-end !important;
+    align-items: center !important;
+    text-align: right !important;
+    white-space: nowrap !important;
   }
 
   .ct-point {
@@ -125,12 +142,11 @@ export const NetWorthVisualization: React.FC<{
     width: '100%',
     showArea: false,
     showPoint: true,
-    // Reserve a wider gutter for the y-axis labels than Chartist's default of
-    // 40, which is too narrow for formatted amounts. The labels are kept
-    // right-aligned within this gutter by alignYAxisLabel so they never spill
-    // into the plot area.
     axisY: {
-      offset: 60,
+      // Compact labels (e.g. "€12k") let us keep a narrower gutter.
+      labelInterpolationFnc: (value: number) =>
+        formatChartValue(value, props.currencySymbol),
+      offset: 50,
     },
     axisX: {
       type: Chartist.FixedScaleAxis,
