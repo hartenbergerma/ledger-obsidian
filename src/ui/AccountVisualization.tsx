@@ -10,6 +10,7 @@ import {
   makeChartLabelFormatter,
 } from '../date-utils';
 import {
+  alignYAxisLabel,
   ChartSegment,
   formatChartValue,
   formatExactValue,
@@ -258,11 +259,12 @@ const BalanceVisualization: React.FC<{
     width: '100%',
     showArea: false,
     showPoint: true,
-    // Widen the y-axis label gutter so currency labels (e.g. "$1,234.50") do
-    // not overflow into the plot area. Chartist's default offset of 40 is too
-    // narrow for formatted amounts.
+    // Reserve a wider gutter for the y-axis labels than Chartist's default of
+    // 40, which is too narrow for formatted amounts. The labels are kept
+    // right-aligned within this gutter by alignYAxisLabel so they never spill
+    // into the plot area.
     axisY: {
-      offset: 80,
+      offset: 60,
     },
     axisX: {
       type: Chartist.FixedScaleAxis,
@@ -278,6 +280,7 @@ const BalanceVisualization: React.FC<{
 
   const listener = useStableListener((dpoint) => {
     if (splitXAxisLabel(dpoint)) return;
+    if (alignYAxisLabel(dpoint)) return;
     if (dpoint.type !== 'point') {
       return;
     }
@@ -361,10 +364,11 @@ const DeltaVisualization: React.FC<{
     // them side by side becomes unreadable once more than two accounts are
     // selected, as the bars get too thin and overflow into each other.
     stackBars: true,
-    // Widen the y-axis label gutter so currency labels do not overflow into the
-    // plot area (Chartist's default offset of 40 is too narrow for amounts).
+    // Reserve a wider gutter for the y-axis labels than Chartist's default of
+    // 40. The labels are kept right-aligned within this gutter by
+    // alignYAxisLabel so they never spill into the plot area.
     axisY: {
-      offset: 80,
+      offset: 60,
     },
     axisX: {
       labelInterpolationFnc: makeChartLabelFormatter(
@@ -376,6 +380,7 @@ const DeltaVisualization: React.FC<{
 
   const listener = useStableListener((dpoint) => {
     if (splitXAxisLabel(dpoint)) return;
+    if (alignYAxisLabel(dpoint)) return;
     if (dpoint.type !== 'bar') {
       return;
     }

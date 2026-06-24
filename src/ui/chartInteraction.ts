@@ -155,9 +155,7 @@ export const splitXAxisLabel = (dpoint: any): boolean => {
       content.style.display = 'block';
       content.style.textAlign = 'center';
       // Only line charts need the half-width shift (see doc comment above).
-      // The first tick (index 0) sits at the left edge of the plot area; shifting
-      // it left by 50% would push it into the y-axis gutter, so skip the shift.
-      if (el.closest('.ct-chart-line') && dpoint.index > 0) {
+      if (el.closest('.ct-chart-line')) {
         content.style.transform = 'translateX(-50%)';
       }
     }
@@ -166,9 +164,9 @@ export const splitXAxisLabel = (dpoint: any): boolean => {
 
   if (nodeName === 'text') {
     // Plain SVG <text>: replace content with two <tspan> children, centered on
-    // the tick via text-anchor. First tick: left-align to stay inside the plot.
+    // the tick via text-anchor.
     const x = el.getAttribute('x') ?? '0';
-    el.setAttribute('text-anchor', dpoint.index === 0 ? 'start' : 'middle');
+    el.setAttribute('text-anchor', 'middle');
     el.textContent = '';
     const addTspan = (label: string, dy: string): void => {
       const tspan = document.createElementNS(
@@ -184,6 +182,51 @@ export const splitXAxisLabel = (dpoint: any): boolean => {
     // where the original single-line label would have been.
     addTspan(top, '-0.5em');
     addTspan(bottom, '1.2em');
+    return true;
+  }
+
+  return false;
+};
+
+/**
+ * alignYAxisLabel intercepts a Chartist y-axis label draw event and forces the
+ * label to be right-aligned so it sits in the gutter to the left of the plot
+ * area, flush against (but not overlapping) the chart.
+ *
+ * Chartist already lays the label out correctly: it reserves a gutter of
+ * `axisY.offset` pixels and places each label in a box whose right edge sits
+ * ~10px left of the plot. The label is supposed to be right-aligned within that
+ * box via Chartist's shipped `.ct-label.ct-vertical.ct-start` CSS
+ * (text-align:right / justify-content:flex-end / text-anchor:end). However, in
+ * Obsidian that rule can be overridden by theme or core CSS, leaving the label
+ * left-aligned so its text spills rightward into the plot area. Re-applying the
+ * alignment as inline styles here wins over any stylesheet and restores the
+ * intended layout regardless of the active theme. Returns true when the event
+ * was a y-axis label so callers can short-circuit further processing.
+ */
+export const alignYAxisLabel = (dpoint: any): boolean => {
+  if (dpoint.type !== 'label') return false;
+  if (dpoint.axis?.units?.pos !== 'y') return false;
+
+  const el = dpoint.element.getNode() as Element;
+  const nodeName = el.nodeName.toLowerCase();
+
+  if (nodeName === 'foreignobject') {
+    // The label content is the <span> child of the foreignObject. Right-align
+    // it within its (offset-wide) box so it hugs the left edge of the plot.
+    const content = el.firstElementChild as HTMLElement | null;
+    if (content) {
+      content.style.display = 'flex';
+      content.style.justifyContent = 'flex-end';
+      content.style.textAlign = 'right';
+      content.style.whiteSpace = 'nowrap';
+    }
+    return true;
+  }
+
+  if (nodeName === 'text') {
+    // Plain SVG <text>: anchor at the end so the text grows left from its x.
+    el.setAttribute('text-anchor', 'end');
     return true;
   }
 

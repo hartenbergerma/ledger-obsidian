@@ -7,6 +7,7 @@ import {
 } from '../date-utils';
 import { TransactionCache } from '../parser';
 import {
+  alignYAxisLabel,
   ChartSegment,
   formatExactValue,
   makeChartSegment,
@@ -124,11 +125,12 @@ export const NetWorthVisualization: React.FC<{
     width: '100%',
     showArea: false,
     showPoint: true,
-    // Widen the y-axis label gutter so currency labels (e.g. "$1,234.50") do
-    // not overflow into the plot area. Chartist's default offset of 40 is too
-    // narrow for formatted amounts.
+    // Reserve a wider gutter for the y-axis labels than Chartist's default of
+    // 40, which is too narrow for formatted amounts. The labels are kept
+    // right-aligned within this gutter by alignYAxisLabel so they never spill
+    // into the plot area.
     axisY: {
-      offset: 80,
+      offset: 60,
     },
     axisX: {
       type: Chartist.FixedScaleAxis,
@@ -144,6 +146,7 @@ export const NetWorthVisualization: React.FC<{
 
   const listener = useStableListener((dpoint) => {
     if (splitXAxisLabel(dpoint)) return;
+    if (alignYAxisLabel(dpoint)) return;
     if (dpoint.type !== 'point') {
       return;
     }
