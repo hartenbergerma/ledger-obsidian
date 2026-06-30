@@ -17,6 +17,7 @@ import {
   Node,
   sanitizeTag,
   sortAccountTree,
+  sortTransactionsForDisplay,
 } from '../src/transaction-utils';
 import { assert } from 'console';
 import * as moment from 'moment';
@@ -354,6 +355,40 @@ describe('sortAccountTree()', () => {
       },
     ];
     expect(input).toEqual(expected);
+  });
+});
+
+describe('sortTransactionsForDisplay()', () => {
+  const settings = settingsWithDefaults({});
+
+  test('newest date first, most recently added first within a day', () => {
+    const file = [
+      '2026-06-15 Kino',
+      '  Ausgaben:Freizeit    €10.40',
+      '  Vermögen:Bank:Wise',
+      '',
+      '2026-06-18 Eschborn',
+      '  Ausgaben:Freizeit:Sport    €115.00',
+      '  Vermögen:Bank:Wise',
+      '',
+      '2026-06-18 Scalable',
+      '  Vermögen:Bank:Scalable    €3.18',
+      '  Einnahmen:Anlagen',
+      '',
+      '2026-06-18 Aliexpress',
+      '  Ausgaben:Freizeit:Sonstiges    €7.00',
+      '  Vermögen:Bank:Sparkasse',
+    ].join('\n');
+    const cache = parse(file, settings);
+    expect(cache.parsingErrors).toEqual([]);
+
+    const ordered = sortTransactionsForDisplay(cache.transactions).map(
+      (t) => t.value.payee,
+    );
+    // The 2026-06-18 entries are newest; within that day the one written last in
+    // the file (Aliexpress) comes first, then Scalable, then Eschborn; the older
+    // Kino is last.
+    expect(ordered).toEqual(['Aliexpress', 'Scalable', 'Eschborn', 'Kino']);
   });
 });
 

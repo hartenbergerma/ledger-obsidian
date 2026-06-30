@@ -169,8 +169,38 @@ export class LedgerModifier {
   public async appendLedger(newExpense: string): Promise<void> {
     const vault = this.plugin.app.vault;
     const fileContents = await vault.read(this.ledgerFile);
-    const newFileContents = `${fileContents}\n${newExpense}`;
+    // formatTransaction already prefixes the entry with a newline. Trim any
+    // trailing whitespace from the existing file first so that exactly one blank
+    // line separates the previous content from the new entry, regardless of
+    // whether the file happened to end with a newline (which previously produced
+    // an extra blank line).
+    const trimmed = fileContents.replace(/\s+$/, '');
+    const newFileContents =
+      trimmed === ''
+        ? newExpense.replace(/^\n+/, '')
+        : `${trimmed}\n${newExpense}`;
     await vault.modify(this.ledgerFile, newFileContents);
+  }
+
+  /**
+   * addRecurringToExisting turns a transaction that already exists in the file
+   * into a recurring one. The existing transaction is updated in place (it stays
+   * a normal transaction — no duplicate is created); only the schedule is added.
+   * Its next occurrence is the first regular date after the existing
+   * transaction's date.
+   */
+  public async addRecurringToExisting(
+    oldTx: EnhancedTransaction,
+    newTx: string,
+    rt: RecurringTransaction,
+    existingDateISO: string,
+  ): Promise<void> {
+    // Update the transaction first so its (pre-modification) block line numbers
+    // are still valid; saveRecurring re-reads the file and inserts by content.
+    await this.updateTransaction(oldTx, newTx);
+    const nextDate =
+      rt.nextDate === existingDateISO ? nextNominalDate(rt) : rt.nextDate;
+    await this.saveRecurring({ ...rt, nextDate });
   }
 
   /**
