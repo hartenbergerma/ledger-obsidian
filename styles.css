@@ -1396,3 +1396,25 @@ tr.introjs-showElement > th {
 .is-mobile .ledger-row-actions {
   gap: 8px;
 }
+
+/*
+File Explorer - Configured Ledger File Badge
+
+A "ledger" badge is shown next to the configured ledger file in the file
+explorer (whatever its extension). The plugin hides the native extension tag on
+the configured file and on any other .ledger file, so this badge identifies only
+the configured file. The styling mimics Obsidian's own nav-file-tag.
+*/
+.nav-file-title.ledger-configured-file::after {
+  content: 'ledger';
+  align-self: center;
+  margin-left: 6px;
+  padding: 0 4px;
+  font-size: 10px;
+  line-height: 1.4;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+  background-color: var(--background-secondary);
+  border-radius: var(--radius-s, 4px);
+}

@@ -10,6 +10,8 @@ import {
   makeRecurId,
   nextNominalDate,
   RecurringTransaction,
+  SchedulePattern,
+  schedulePatternChanged,
 } from '../recurring';
 import {
   formatComment,
@@ -370,12 +372,6 @@ const Margin = styled.div`
   margin: 8px;
 `;
 
-const Warning = styled.div`
-  background: var(--background-modifier-error);
-  width: 458px;
-  padding: 10px 15px;
-`;
-
 const FormStyles = styled.div`
   .flexRow {
     display: flex;
@@ -514,7 +510,6 @@ interface ValueErrors {
 }
 
 export const EditTransaction: React.FC<{
-  displayFileWarning: boolean;
   currencySymbol: string;
   initialState: EnhancedTransaction;
   initialRecurring?: RecurringTransaction;
@@ -677,14 +672,6 @@ export const EditTransaction: React.FC<{
     <FormStyles>
       <h2>{recurringEdit ? 'Edit Recurring Transaction' : 'Add to Ledger'}</h2>
 
-      {props.displayFileWarning ? (
-        <Warning>
-          Please rename your ledger file to end with the .ledger extension. Once
-          renamed, please update the configuration option in the Ledger plugin
-          settings.
-        </Warning>
-      ) : null}
-
       <Formik
         initialValues={initialValues}
         validateOnChange={false}
@@ -753,15 +740,7 @@ export const EditTransaction: React.FC<{
 
           // When the recurrence toggle is on, save a recurring transaction.
           if (values.recurring.enabled) {
-            const period = {
-              intervalCount: values.recurring.intervalCount,
-              unit: values.recurring.unit,
-              weekday: values.recurring.weekday,
-              dayOfMonth: values.recurring.dayOfMonth,
-            };
-            const recurId = recurIdRef.current;
-            const rt: RecurringTransaction = {
-              id: recurId,
+            const period: SchedulePattern = {
               intervalCount: values.recurring.intervalCount,
               unit: values.recurring.unit,
               weekday:
@@ -772,64 +751,112 @@ export const EditTransaction: React.FC<{
                 values.recurring.unit === 'month'
                   ? values.recurring.dayOfMonth
                   : undefined,
-              // When editing directly from the recurring list the date field IS
-              // the next-occurrence date, so use it directly. For a linked
-              // instance, preserve the schedule's existing nextDate. For a brand
-              // new schedule, compute the first occurrence on or after the date.
-              nextDate: recurringEdit
-                ? values.date
-                : recurringSource
-                  ? recurringSource.nextDate
-                  : firstOccurrenceOnOrAfter(values.date, period),
-              endDate: recurringSource ? recurringSource.endDate : undefined,
-              adjustToWorkday: values.recurring.adjustToWorkday,
-              payee: localPayee,
-              // The schedule comment holds the memo and user tag only; the
-              // per-instance recurring marker is added when an instance is
-              // materialized.
-              comment: formatComment(memo, userTags),
-              expenselines,
-              block: recurringSource ? recurringSource.block : undefined,
             };
+            const recurId = recurIdRef.current;
 
-            // Editing a schedule directly from the recurring list.
+            // Whether the recurrence pattern differs from the schedule this form
+            // started from (used to decide if the next date must be recomputed).
+            const patternChanged = recurringSource
+              ? schedulePatternChanged(recurringSource, period)
+              : true;
+
+            // --- Editing a schedule directly from the recurring table. ---
+            // Changing the schedule itself moves the next occurrence onto the new
+            // anchor; editing only the date field keeps it as an explicit one-off
+            // override.
             if (recurringEdit) {
+              const nextDate = patternChanged
+                ? firstOccurrenceOnOrAfter(values.date, period)
+                : values.date;
+              const rt: RecurringTransaction = {
+                id: recurId,
+                ...period,
+                nextDate,
+                endDate: recurringEdit.endDate,
+                adjustToWorkday: values.recurring.adjustToWorkday,
+                payee: localPayee,
+                comment: formatComment(memo, userTags),
+                expenselines,
+                block: recurringEdit.block,
+              };
               props.updater.saveRecurring(rt).then(props.close);
               return;
             }
 
-            // Enabling recurrence while editing an existing transaction: tag
-            // that transaction in place with the recurring marker and save the
-            // schedule, rather than appending a duplicate transaction.
-            if (props.operation === 'modify') {
-              const markerComment = formatComment(memo, [
-                ...userTags,
-                recurringTagFor(recurId),
-              ]);
-              const inPlaceTx: EnhancedTransaction = {
-                ...props.initialState,
-                value: {
-                  ...props.initialState.value,
-                  payee: localPayee,
-                  date: values.date.replace(/-/g, '/'),
-                  expenselines,
-                  comment: markerComment,
-                },
-              };
-              const txStr = formatTransaction(inPlaceTx, props.currencySymbol);
+            // The in-place transaction keeps (or gains) the recurring marker tag
+            // that links it to its schedule. The same string is written for both
+            // remaining modify cases below.
+            const markerComment = formatComment(memo, [
+              ...userTags,
+              recurringTagFor(recurId),
+            ]);
+            const inPlaceTx: EnhancedTransaction = {
+              ...props.initialState,
+              value: {
+                ...props.initialState.value,
+                payee: localPayee,
+                date: values.date.replace(/-/g, '/'),
+                expenselines,
+                comment: markerComment,
+              },
+            };
+            const txStr = formatTransaction(inPlaceTx, props.currencySymbol);
 
-              // For a brand new schedule, the transaction we just tagged is the
-              // occurrence for its date, so advance the schedule past it. An
-              // existing schedule keeps its own next date.
-              const scheduleToSave = linkedRecurring
-                ? rt
-                : {
-                    ...rt,
-                    nextDate:
-                      rt.nextDate === values.date
-                        ? nextNominalDate(rt)
-                        : rt.nextDate,
-                  };
+            // --- Editing a transaction that is already an instance of a
+            // schedule. --- Edits to the transaction stay on that transaction
+            // only. The schedule is left untouched unless its recurrence pattern
+            // was changed here, in which case only the pattern (and resulting
+            // next date) are updated — never the schedule's own payee, amounts
+            // or memo.
+            if (props.operation === 'modify' && linkedRecurring) {
+              if (patternChanged) {
+                const updatedSchedule: RecurringTransaction = {
+                  ...linkedRecurring,
+                  ...period,
+                  adjustToWorkday: values.recurring.adjustToWorkday,
+                  nextDate: firstOccurrenceOnOrAfter(
+                    linkedRecurring.nextDate,
+                    period,
+                  ),
+                };
+                props.updater
+                  .makeTransactionRecurring(
+                    props.initialState,
+                    txStr,
+                    updatedSchedule,
+                  )
+                  .then(props.close);
+              } else {
+                props.updater
+                  .updateTransaction(props.initialState, txStr)
+                  .then(props.close);
+              }
+              return;
+            }
+
+            // --- Turning an existing (non-recurring) transaction into a
+            // recurring one. --- Tag it in place and create a schedule derived
+            // from it, rather than appending a duplicate transaction.
+            if (props.operation === 'modify') {
+              const rt: RecurringTransaction = {
+                id: recurId,
+                ...period,
+                nextDate: firstOccurrenceOnOrAfter(values.date, period),
+                endDate: undefined,
+                adjustToWorkday: values.recurring.adjustToWorkday,
+                payee: localPayee,
+                comment: formatComment(memo, userTags),
+                expenselines,
+              };
+              // The transaction we just tagged is the occurrence for its date, so
+              // advance the schedule past it.
+              const scheduleToSave = {
+                ...rt,
+                nextDate:
+                  rt.nextDate === values.date
+                    ? nextNominalDate(rt)
+                    : rt.nextDate,
+              };
               props.updater
                 .makeTransactionRecurring(
                   props.initialState,
@@ -840,8 +867,18 @@ export const EditTransaction: React.FC<{
               return;
             }
 
-            // A brand new (or cloned) recurring transaction: add a first
+            // --- A brand new (or cloned) recurring transaction. --- Add a first
             // occurrence immediately and save the schedule.
+            const rt: RecurringTransaction = {
+              id: recurId,
+              ...period,
+              nextDate: firstOccurrenceOnOrAfter(values.date, period),
+              endDate: undefined,
+              adjustToWorkday: values.recurring.adjustToWorkday,
+              payee: localPayee,
+              comment: formatComment(memo, userTags),
+              expenselines,
+            };
             props.updater.createRecurring(rt, values.date).then(props.close);
             return;
           }

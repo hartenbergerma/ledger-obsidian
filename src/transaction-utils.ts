@@ -354,6 +354,32 @@ export const getAccountsForPayee = (
     .map((line) => line.dealiasedAccount);
 };
 
+/**
+ * filterBySearch matches transactions against a free-text query. The Payee and
+ * the memos (the transaction-level memo and any per-posting memos) are searched,
+ * case-insensitively. An empty query matches everything.
+ */
+export const filterBySearch =
+  (query: string): Filter =>
+  (tx: EnhancedTransaction): boolean => {
+    const q = query.trim().toLowerCase();
+    if (q === '') {
+      return true;
+    }
+    if (tx.value.payee.toLowerCase().includes(q)) {
+      return true;
+    }
+    if (getMemoFromComment(tx.value.comment).toLowerCase().includes(q)) {
+      return true;
+    }
+    return tx.value.expenselines.some(
+      (line) =>
+        'comment' in line &&
+        !!line.comment &&
+        line.comment.toLowerCase().includes(q),
+    );
+  };
+
 export const filterByStartDate =
   (start: Moment): Filter =>
   (tx) =>

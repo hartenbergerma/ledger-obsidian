@@ -1,4 +1,4 @@
-import { getTransactionCache, LedgerModifier } from './file-interface';
+import { LedgerModifier } from './file-interface';
 import type LedgerPlugin from './main';
 import { TransactionCache } from './parser';
 import { LedgerDashboard } from './ui/LedgerDashboard';
@@ -22,10 +22,6 @@ export class LedgerView extends TextFileView {
     this.currentFilePath = null;
     this.updateInterface = null;
 
-    this.addAction('ledger', 'Add to Ledger', () => {
-      this.updateInterface?.openExpenseModal('new');
-    });
-
     this.addAction('pencil', 'Switch to Markdown View', () => {
       const state = leaf.view.getState();
       leaf.setViewState(
@@ -42,7 +38,11 @@ export class LedgerView extends TextFileView {
   }
 
   public canAcceptExtension(extension: string): boolean {
-    return extension === 'ledger';
+    // The dashboard is only ever shown for the single configured ledger file,
+    // whatever its extension (the plugin switches that file into this view).
+    // Accept any extension so the view can host that file even when it is, for
+    // example, a Markdown (.md) file.
+    return true;
   }
 
   public getViewType(): string {
@@ -86,20 +86,21 @@ export class LedgerView extends TextFileView {
 
   public async onLoadFile(file: TFile): Promise<void> {
     console.debug('Ledger: File being loaded: ' + file.path);
-    if (file.path === this.plugin.settings.ledgerFile) {
-      this.txCache = this.plugin.txCache;
-    } else {
-      // TODO: Setup a file watch for modifications while this file is open.
-      console.debug(
-        'Ledger: Generating txCache for other Ledger file: ' + file.path,
-      );
-      this.txCache = await getTransactionCache(
-        this.plugin.app.metadataCache,
-        this.plugin.app.vault,
-        this.plugin.settings,
-        file.path,
-      );
+
+    // The dashboard is reserved for the single configured ledger file. Any other
+    // file that ends up in this view (for example another file that happens to
+    // use the .ledger extension) is handed back to the Markdown editor so it
+    // behaves like a normal text file.
+    if (file.path !== this.plugin.settings.ledgerFile) {
+      this.leaf.setViewState({
+        type: 'markdown',
+        state: { file: file.path },
+        popstate: true,
+      } as ViewState);
+      return;
     }
+
+    this.txCache = this.plugin.txCache;
 
     if (this.currentFilePath !== file.path) {
       this.currentFilePath = file.path;

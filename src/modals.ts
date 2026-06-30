@@ -113,9 +113,9 @@ export class RecurringAcceptModal extends Modal {
     const buttonContainer = this.contentEl.createDiv({
       cls: 'modal-button-container',
     });
-    const cancelButton = buttonContainer.createEl('button', { text: 'Cancel' });
-    cancelButton.addEventListener('click', () => this.close());
 
+    // No explicit Cancel button: the modal's own "×" in the top-right corner
+    // already dismisses the dialog, so a Cancel button would be redundant.
     const skipButton = buttonContainer.createEl('button', { text: 'Skip' });
     skipButton.addEventListener('click', () => {
       this.onSkip();
@@ -167,8 +167,6 @@ export class AddExpenseModal extends Modal {
 
     ReactDOM.render(
       React.createElement(EditTransaction, {
-        displayFileWarning:
-          !this.plugin.settings.ledgerFile.endsWith('.ledger'),
         currencySymbol: this.plugin.settings.currencySymbol,
         initialState: this.initialState,
         initialRecurring: this.initialRecurring,

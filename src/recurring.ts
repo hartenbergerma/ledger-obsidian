@@ -124,6 +124,36 @@ interface ParsedPeriod {
   dayOfMonth?: number;
 }
 
+/**
+ * SchedulePattern captures just the recurrence pattern fields that determine
+ * when a schedule's occurrences land (its rhythm), independent of the schedule's
+ * current next-date state, payee or postings.
+ */
+export interface SchedulePattern {
+  intervalCount: number;
+  unit: 'week' | 'month';
+  weekday?: number;
+  dayOfMonth?: number;
+}
+
+/**
+ * schedulePatternChanged returns true when two schedule patterns differ in a way
+ * that moves the occurrences: a different interval, unit, or the relevant anchor
+ * (weekday for weekly schedules, day-of-month for monthly ones). It is used to
+ * decide whether editing a recurrence should recompute the schedule's next date.
+ */
+export const schedulePatternChanged = (
+  a: SchedulePattern,
+  b: SchedulePattern,
+): boolean => {
+  if (a.intervalCount !== b.intervalCount || a.unit !== b.unit) {
+    return true;
+  }
+  return b.unit === 'week'
+    ? (a.weekday ?? 1) !== (b.weekday ?? 1)
+    : (a.dayOfMonth ?? 1) !== (b.dayOfMonth ?? 1);
+};
+
 // --- Schedule math ---------------------------------------------------------
 
 /**

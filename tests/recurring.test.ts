@@ -12,6 +12,7 @@ import {
   materializeTransaction,
   nextNominalDate,
   RecurringTransaction,
+  schedulePatternChanged,
 } from '../src/recurring';
 import { settingsWithDefaults } from '../src/settings';
 import * as moment from 'moment';
@@ -132,6 +133,82 @@ describe('schedule math', () => {
       nextDate: '2026-07-03',
     };
     expect(nextNominalDate(monthly)).toBe('2026-07-15');
+  });
+
+  test('schedulePatternChanged detects pattern-affecting edits', () => {
+    // Same pattern, only the next date differs: not a pattern change.
+    expect(
+      schedulePatternChanged(monthlyRent, {
+        intervalCount: 1,
+        unit: 'month',
+        dayOfMonth: 15,
+      }),
+    ).toBe(false);
+    // Moving the day of the month is a pattern change.
+    expect(
+      schedulePatternChanged(monthlyRent, {
+        intervalCount: 1,
+        unit: 'month',
+        dayOfMonth: 20,
+      }),
+    ).toBe(true);
+    // Changing the interval is a pattern change.
+    expect(
+      schedulePatternChanged(monthlyRent, {
+        intervalCount: 2,
+        unit: 'month',
+        dayOfMonth: 15,
+      }),
+    ).toBe(true);
+    // Switching units is a pattern change; the weekday anchor is then compared.
+    expect(
+      schedulePatternChanged(monthlyRent, {
+        intervalCount: 1,
+        unit: 'week',
+        weekday: 1,
+      }),
+    ).toBe(true);
+    const weekly: RecurringTransaction = {
+      ...monthlyRent,
+      unit: 'week',
+      weekday: 1,
+      dayOfMonth: undefined,
+    };
+    expect(
+      schedulePatternChanged(weekly, {
+        intervalCount: 1,
+        unit: 'week',
+        weekday: 1,
+      }),
+    ).toBe(false);
+    expect(
+      schedulePatternChanged(weekly, {
+        intervalCount: 1,
+        unit: 'week',
+        weekday: 4,
+      }),
+    ).toBe(true);
+  });
+
+  test('editing a monthly schedule recomputes the next date onto the new anchor', () => {
+    // Mirrors how the edit form recomputes the next date when the schedule (but
+    // not the date field) is changed: the next occurrence snaps to the new
+    // day-of-month on or after the previous next date.
+    expect(
+      firstOccurrenceOnOrAfter(monthlyRent.nextDate, {
+        intervalCount: 1,
+        unit: 'month',
+        dayOfMonth: 20,
+      }),
+    ).toBe('2026-07-20');
+    // Moving to an earlier day-of-month rolls to the following month.
+    expect(
+      firstOccurrenceOnOrAfter(monthlyRent.nextDate, {
+        intervalCount: 1,
+        unit: 'month',
+        dayOfMonth: 10,
+      }),
+    ).toBe('2026-08-10');
   });
 
   test('advanceSchedule returns a copy with the next date', () => {

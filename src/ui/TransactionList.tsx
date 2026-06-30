@@ -8,6 +8,7 @@ import { isRecurringInstance } from '../recurring';
 import {
   filterByAccount,
   filterByEndDate,
+  filterBySearch,
   filterByStartDate,
   filterByTag,
   filterTransactions,
@@ -19,7 +20,8 @@ import {
 import { DeleteIcon, EditIcon } from './ActionIcons';
 import { ChartSegment } from './chartInteraction';
 import { RecurringPill } from './Recurring';
-import { TagFilter, TagPill } from './Tag';
+import { TagPill } from './Tag';
+import { TransactionToolbar } from './TransactionToolbar';
 import { Moment } from 'moment';
 import React from 'react';
 import {
@@ -145,6 +147,12 @@ const MobileTxListStyle = styled.div`
     overflow-wrap: anywhere;
   }
 
+  /* Give the payee name a little extra breathing room before the first tag /
+     recurring pill (on top of the row gap) so the pills don't crowd the text. */
+  .mobile-tx-payee-name {
+    margin-right: 4px;
+  }
+
   .mobile-tx-date {
     color: var(--text-muted);
     font-size: 0.85em;
@@ -196,6 +204,7 @@ export const MobileTransactionList: React.FC<{
 }> = (props): JSX.Element => {
   const pageSize = 20;
   const [visibleCount, setVisibleCount] = React.useState(pageSize);
+  const [search, setSearch] = React.useState('');
 
   const start = props.segment ? props.segment.filterStart : props.startDate;
   const end = props.segment ? props.segment.filterEnd : props.endDate;
@@ -217,20 +226,34 @@ export const MobileTransactionList: React.FC<{
       filteredTransactions,
       props.selectedTag,
     );
+    filteredTransactions = filterTransactions(
+      filteredTransactions,
+      filterBySearch(search),
+    );
 
     return sortTransactionsForDisplay(filteredTransactions);
-  }, [props.txCache, props.selectedAccounts, props.selectedTag, start, end]);
+  }, [
+    props.txCache,
+    props.selectedAccounts,
+    props.selectedTag,
+    search,
+    start,
+    end,
+  ]);
 
   const banner =
     props.segment && props.onClearSegment ? (
       <SegmentBanner segment={props.segment} onClear={props.onClearSegment} />
     ) : null;
 
-  const tagFilter = (
-    <TagFilter
+  const toolbar = (
+    <TransactionToolbar
       allTags={props.txCache.tags}
       selectedTag={props.selectedTag}
       onToggleTag={props.onToggleTag}
+      search={search}
+      onSearchChange={setSearch}
+      onAdd={() => props.updater.openExpenseModal('new')}
     />
   );
 
@@ -238,7 +261,7 @@ export const MobileTransactionList: React.FC<{
     return (
       <>
         {banner}
-        {tagFilter}
+        {toolbar}
         <p>No transactions for the selected time period.</p>
       </>
     );
@@ -247,7 +270,7 @@ export const MobileTransactionList: React.FC<{
   return (
     <MobileTxListStyle>
       {banner}
-      {tagFilter}
+      {toolbar}
       {transactions.slice(0, visibleCount).map((tx) => (
         <MobileTransactionEntry
           key={`${tx.block.firstLine}-${tx.value.date}-${tx.value.payee}`}
@@ -455,6 +478,7 @@ export const RecentTransactionList: React.FC<{
   segment?: ChartSegment | null;
   onClearSegment?: () => void;
 }> = (props): JSX.Element => {
+  const [search, setSearch] = React.useState('');
   const start = props.segment ? props.segment.filterStart : props.startDate;
   const end = props.segment ? props.segment.filterEnd : props.endDate;
   const data = React.useMemo(() => {
@@ -470,22 +494,29 @@ export const RecentTransactionList: React.FC<{
       filteredTransactions,
       props.selectedTag,
     );
+    filteredTransactions = filterTransactions(
+      filteredTransactions,
+      filterBySearch(search),
+    );
     return buildTableRows(
       filteredTransactions,
       props.currencySymbol,
       props.updater,
     );
-  }, [props.txCache, props.selectedTag, start, end, props.segment]);
+  }, [props.txCache, props.selectedTag, search, start, end, props.segment]);
   return (
     <>
       <h2>Transactions</h2>
       {props.segment && props.onClearSegment ? (
         <SegmentBanner segment={props.segment} onClear={props.onClearSegment} />
       ) : null}
-      <TagFilter
+      <TransactionToolbar
         allTags={props.txCache.tags}
         selectedTag={props.selectedTag}
         onToggleTag={props.onToggleTag}
+        search={search}
+        onSearchChange={setSearch}
+        onAdd={() => props.updater.openExpenseModal('new')}
       />
       <TransactionTable data={data} onSelectTag={props.onToggleTag} />
     </>
@@ -505,6 +536,7 @@ export const TransactionList: React.FC<{
   segment?: ChartSegment | null;
   onClearSegment?: () => void;
 }> = (props): JSX.Element => {
+  const [search, setSearch] = React.useState('');
   const start = props.segment ? props.segment.filterStart : props.startDate;
   const end = props.segment ? props.segment.filterEnd : props.endDate;
   const data = React.useMemo(() => {
@@ -526,22 +558,36 @@ export const TransactionList: React.FC<{
       filteredTransactions,
       props.selectedTag,
     );
+    filteredTransactions = filterTransactions(
+      filteredTransactions,
+      filterBySearch(search),
+    );
     return buildTableRows(
       filteredTransactions,
       props.currencySymbol,
       props.updater,
     );
-  }, [props.txCache, props.selectedAccounts, props.selectedTag, start, end]);
+  }, [
+    props.txCache,
+    props.selectedAccounts,
+    props.selectedTag,
+    search,
+    start,
+    end,
+  ]);
 
   return (
     <>
       {props.segment && props.onClearSegment ? (
         <SegmentBanner segment={props.segment} onClear={props.onClearSegment} />
       ) : null}
-      <TagFilter
+      <TransactionToolbar
         allTags={props.txCache.tags}
         selectedTag={props.selectedTag}
         onToggleTag={props.onToggleTag}
+        search={search}
+        onSearchChange={setSearch}
+        onAdd={() => props.updater.openExpenseModal('new')}
       />
       <TransactionTable data={data} onSelectTag={props.onToggleTag} />
     </>

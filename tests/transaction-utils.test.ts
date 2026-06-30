@@ -3,6 +3,7 @@ import { settingsWithDefaults } from '../src/settings';
 import {
   filterByAccount,
   filterByPayeeExact,
+  filterBySearch,
   filterByTag,
   filterTransactions,
   formatComment,
@@ -519,6 +520,65 @@ describe('filterTransactions', () => {
         filterByPayeeExact('Home Depot'),
       );
       expect(result).toEqual([]);
+    });
+  });
+
+  describe('filterBySearch', () => {
+    const memoTx: EnhancedTransaction = {
+      type: 'tx',
+      blockLine: -1,
+      block: emptyBlock,
+      value: {
+        date: '2021-12-28',
+        payee: 'Amazon',
+        comment: 'birthday present #gifts',
+        expenselines: [
+          {
+            account: 'e:Shopping',
+            dealiasedAccount: 'Expenses:Shopping',
+            amount: 30,
+            currency: '$',
+            reconcile: '',
+            comment: 'wireless headphones',
+          },
+          {
+            amount: -30,
+            account: 'c:Citi',
+            dealiasedAccount: 'Credit:City',
+            reconcile: '',
+          },
+        ],
+      },
+    };
+
+    test('an empty query matches everything', () => {
+      const input = [tx1, tx2, memoTx];
+      expect(filterTransactions(input, filterBySearch(''))).toEqual(input);
+      expect(filterTransactions(input, filterBySearch('   '))).toEqual(input);
+    });
+
+    test('matches on the payee, case-insensitively', () => {
+      const input = [tx1, tx2, memoTx];
+      expect(filterTransactions(input, filterBySearch('costco'))).toEqual([
+        tx1,
+      ]);
+      expect(filterTransactions(input, filterBySearch('joe'))).toEqual([tx2]);
+    });
+
+    test('matches on the transaction memo (excluding tags)', () => {
+      const input = [tx1, tx2, memoTx];
+      expect(filterTransactions(input, filterBySearch('birthday'))).toEqual([
+        memoTx,
+      ]);
+      // The tag text itself is not part of the searchable memo.
+      expect(filterTransactions(input, filterBySearch('gifts'))).toEqual([]);
+    });
+
+    test('matches on a per-posting memo', () => {
+      const input = [tx1, tx2, memoTx];
+      expect(filterTransactions(input, filterBySearch('headphones'))).toEqual([
+        memoTx,
+      ]);
     });
   });
 
