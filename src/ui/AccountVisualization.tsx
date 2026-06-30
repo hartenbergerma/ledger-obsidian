@@ -5,14 +5,17 @@ import {
 } from '../balance-utils';
 import {
   Interval,
+  makeAxisTicks,
   makeBucketNames,
   makeChartLabelFormatter,
 } from '../date-utils';
 import {
+  alignYAxisLabel,
   ChartSegment,
   formatChartValue,
   formatExactValue,
   makeChartSegment,
+  splitXAxisLabel,
   useStableListener,
 } from './chartInteraction';
 import Chartist, { IBarChartOptions, ILineChartOptions } from 'chartist';
@@ -21,6 +24,8 @@ import { Platform } from 'obsidian';
 import React from 'react';
 import ChartistGraph from 'react-chartist';
 import styled from 'styled-components';
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 const ChartHeader = styled.div`
   display: flex;
@@ -71,6 +76,11 @@ const Chart = styled.div<{ $mobile: boolean }>`
     color: var(--text-muted);
   }
 
+  /* Allow two-line x-axis labels to extend below the SVG boundary. */
+  svg {
+    overflow: visible;
+  }
+
   /*
   Make grid lines consistently visible. The Chartist defaults are nearly
   invisible against the desktop theme and entirely absent on mobile.
@@ -79,6 +89,16 @@ const Chart = styled.div<{ $mobile: boolean }>`
     stroke: var(--background-modifier-border);
     stroke-width: 1px;
     stroke-dasharray: 2px;
+  }
+
+  /* Restore Chartist's intended right-alignment for y-axis labels (see
+  NetWorthVisualization for a full explanation). */
+  .ct-label.ct-vertical.ct-start {
+    display: flex !important;
+    justify-content: flex-end !important;
+    align-items: center !important;
+    text-align: right !important;
+    white-space: nowrap !important;
   }
 
   .ct-point,
@@ -146,6 +166,8 @@ export const AccountVisualization: React.FC<{
         allAccounts={props.allAccounts}
         accounts={filteredAccounts}
         dateBuckets={dateBuckets}
+        startDate={props.startDate}
+        endDate={props.endDate}
         interval={props.interval}
         currencySymbol={props.currencySymbol}
         selectedSegment={props.selectedSegment}
@@ -202,37 +224,71 @@ const BalanceVisualization: React.FC<{
   allAccounts: string[];
   accounts: string[];
   dateBuckets: string[];
+  startDate: Moment;
+  endDate: Moment;
   interval: Interval;
   currencySymbol: string;
   selectedSegment: ChartSegment | null;
   setSelectedSegment: (segment: ChartSegment | null) => void;
 }> = (props): JSX.Element => {
+  // Only plot buckets which fall on or after the first recorded transaction.
+  // The daily balance map is keyed by date from the first transaction onward,
+  // so a bucket missing from it lies before any data exists. All accounts
+  // share these buckets, so the visible set is the same for every series.
+  const visibleBuckets = props.dateBuckets.filter((bucket) =>
+    props.dailyAccountBalanceMap.has(bucket),
+  );
+  const xs = visibleBuckets.map((bucket) => window.moment(bucket).valueOf());
+  const ticks = makeAxisTicks(
+    props.interval,
+    props.startDate,
+    props.endDate,
+    props.dateBuckets,
+  );
+
   const data = {
-    labels: props.dateBuckets,
+    // Position each point at its true date on a numeric time axis so the axis
+    // ticks (placed at calendar boundaries) are decoupled from the points.
     series: props.accounts.map((account) =>
       makeBalanceData(
         props.dailyAccountBalanceMap,
-        props.dateBuckets,
+        visibleBuckets,
         account,
         props.allAccounts,
-      ),
+      ).map((d, i) => ({ x: xs[i], y: d.y })),
     ),
   };
+
+  // Guard against a zero-width axis (start === end) which would make Chartist
+  // divide by zero when projecting points.
+  const low = props.startDate.valueOf();
+  const high = Math.max(props.endDate.valueOf(), low + MS_PER_DAY);
 
   const options: ILineChartOptions = {
     height: '300px',
     width: '100%',
     showArea: false,
     showPoint: true,
+    axisY: {
+      labelInterpolationFnc: (value: number) =>
+        formatChartValue(value, props.currencySymbol),
+      offset: 50,
+    },
     axisX: {
+      type: Chartist.FixedScaleAxis,
+      low,
+      high,
+      ticks,
       labelInterpolationFnc: makeChartLabelFormatter(
         props.interval,
-        props.dateBuckets.length,
+        ticks.length,
       ),
-    },
+    } as any,
   };
 
   const listener = useStableListener((dpoint) => {
+    if (splitXAxisLabel(dpoint)) return;
+    if (alignYAxisLabel(dpoint)) return;
     if (dpoint.type !== 'point') {
       return;
     }
@@ -256,11 +312,11 @@ const BalanceVisualization: React.FC<{
       }
       const previousBoundary =
         dpoint.index > 0
-          ? window.moment(props.dateBuckets[dpoint.index - 1])
-          : window.moment(props.dateBuckets[0]).subtract(1, 'day');
+          ? window.moment(visibleBuckets[dpoint.index - 1])
+          : window.moment(visibleBuckets[0]).subtract(1, 'day');
       props.setSelectedSegment(
         makeChartSegment(
-          props.dateBuckets,
+          visibleBuckets,
           dpoint.index,
           previousBoundary,
           dpoint.value.y,
@@ -316,6 +372,11 @@ const DeltaVisualization: React.FC<{
     // them side by side becomes unreadable once more than two accounts are
     // selected, as the bars get too thin and overflow into each other.
     stackBars: true,
+    axisY: {
+      labelInterpolationFnc: (value: number) =>
+        formatChartValue(value, props.currencySymbol),
+      offset: 50,
+    },
     axisX: {
       labelInterpolationFnc: makeChartLabelFormatter(
         props.interval,
@@ -325,6 +386,8 @@ const DeltaVisualization: React.FC<{
   };
 
   const listener = useStableListener((dpoint) => {
+    if (splitXAxisLabel(dpoint)) return;
+    if (alignYAxisLabel(dpoint)) return;
     if (dpoint.type !== 'bar') {
       return;
     }

@@ -61,8 +61,19 @@ export const makeChartSegment = (
   value: number,
   interval: Interval,
 ): ChartSegment => {
-  const filterEnd = window.moment(buckets[index]);
-  const filterStart = previousBoundary.clone().add(1, 'day');
+  let filterEnd = window.moment(buckets[index]);
+  let filterStart = previousBoundary.clone().add(1, 'day');
+  if (interval === 'month' && index > 0) {
+    if (filterEnd.date() === 1) {
+      // Bucket lands on the 1st: it represents the complete preceding calendar
+      // month, so shift the window back to 1st–last of that month.
+      filterEnd = filterEnd.clone().subtract(1, 'day');
+      filterStart = filterEnd.clone().startOf('month');
+    } else {
+      // Partial month at the end of the range: show from the 1st of that month.
+      filterStart = filterEnd.clone().startOf('month');
+    }
+  }
   return {
     index,
     filterStart,
@@ -103,6 +114,123 @@ export const formatChartValue = (value: number, symbol: string): string => {
     body = abs.toFixed(0);
   }
   return `${sign}${symbol}${body}`;
+};
+
+/**
+ * splitXAxisLabel intercepts a Chartist x-axis label draw event and replaces
+ * the single-line label with two lines, breaking before the last space (e.g.
+ * the day number for days, or the year for months). It also centers the label
+ * on its tick. Returns true when the event was an x-axis label (so callers can
+ * short-circuit further processing).
+ *
+ * Chartist renders axis labels as either:
+ *  - a <foreignObject> wrapping an HTML <span> (modern Electron/Chromium,
+ *    where document.implementation.hasFeature always returns true), or
+ *  - a plain SVG <text> element (older environments).
+ *
+ * Centering differs by chart type. For line charts (FixedScaleAxis) the label
+ * box's left edge sits on the tick, so we shift the content left by half its
+ * width (translateX(-50%)) to center it. For bar charts (StepAxis) the box
+ * already brackets the bar, so centering the text within the box is enough.
+ */
+export const splitXAxisLabel = (dpoint: any): boolean => {
+  if (dpoint.type !== 'label') return false;
+  if (dpoint.axis?.units?.pos !== 'x') return false;
+
+  const text: string = dpoint.text ?? '';
+  const spaceIdx = text.lastIndexOf(' ');
+  if (spaceIdx < 0) return false;
+
+  const top = text.slice(0, spaceIdx);
+  const bottom = text.slice(spaceIdx + 1);
+  const el = dpoint.element.getNode() as Element;
+  const nodeName = el.nodeName.toLowerCase();
+
+  if (nodeName === 'foreignobject') {
+    // The label content is the <span> child of the foreignObject. Replace its
+    // text with two lines and center it on the tick.
+    const content = el.firstElementChild as HTMLElement | null;
+    if (content) {
+      content.innerHTML = `${top}<br>${bottom}`;
+      content.style.display = 'block';
+      content.style.textAlign = 'center';
+      // Only line charts need the half-width shift (see doc comment above).
+      if (el.closest('.ct-chart-line')) {
+        content.style.transform = 'translateX(-50%)';
+      }
+    }
+    return true;
+  }
+
+  if (nodeName === 'text') {
+    // Plain SVG <text>: replace content with two <tspan> children, centered on
+    // the tick via text-anchor.
+    const x = el.getAttribute('x') ?? '0';
+    el.setAttribute('text-anchor', 'middle');
+    el.textContent = '';
+    const addTspan = (label: string, dy: string): void => {
+      const tspan = document.createElementNS(
+        'http://www.w3.org/2000/svg',
+        'tspan',
+      );
+      tspan.setAttribute('x', x);
+      tspan.setAttribute('dy', dy);
+      tspan.textContent = label;
+      el.appendChild(tspan);
+    };
+    // Shift the first line up and the second down so the pair is centered
+    // where the original single-line label would have been.
+    addTspan(top, '-0.5em');
+    addTspan(bottom, '1.2em');
+    return true;
+  }
+
+  return false;
+};
+
+/**
+ * alignYAxisLabel intercepts a Chartist y-axis label draw event and forces the
+ * label to be right-aligned so it sits in the gutter to the left of the plot
+ * area, flush against (but not overlapping) the chart.
+ *
+ * Chartist already lays the label out correctly: it reserves a gutter of
+ * `axisY.offset` pixels and places each label in a box whose right edge sits
+ * ~10px left of the plot. The label is supposed to be right-aligned within that
+ * box via Chartist's shipped `.ct-label.ct-vertical.ct-start` CSS
+ * (text-align:right / justify-content:flex-end / text-anchor:end). However, in
+ * Obsidian that rule can be overridden by theme or core CSS, leaving the label
+ * left-aligned so its text spills rightward into the plot area. Re-applying the
+ * alignment as inline styles here wins over any stylesheet and restores the
+ * intended layout regardless of the active theme. Returns true when the event
+ * was a y-axis label so callers can short-circuit further processing.
+ */
+export const alignYAxisLabel = (dpoint: any): boolean => {
+  if (dpoint.type !== 'label') return false;
+  if (dpoint.axis?.units?.pos !== 'y') return false;
+
+  const el = dpoint.element.getNode() as Element;
+  const nodeName = el.nodeName.toLowerCase();
+
+  if (nodeName === 'foreignobject') {
+    // The label content is the <span> child of the foreignObject. Right-align
+    // it within its (offset-wide) box so it hugs the left edge of the plot.
+    const content = el.firstElementChild as HTMLElement | null;
+    if (content) {
+      content.style.display = 'flex';
+      content.style.justifyContent = 'flex-end';
+      content.style.textAlign = 'right';
+      content.style.whiteSpace = 'nowrap';
+    }
+    return true;
+  }
+
+  if (nodeName === 'text') {
+    // Plain SVG <text>: anchor at the end so the text grows left from its x.
+    el.setAttribute('text-anchor', 'end');
+    return true;
+  }
+
+  return false;
 };
 
 /**

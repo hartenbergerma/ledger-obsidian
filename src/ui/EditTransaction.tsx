@@ -8,6 +8,7 @@ import {
 import {
   firstOccurrenceOnOrAfter,
   makeRecurId,
+  nextNominalDate,
   RecurringTransaction,
 } from '../recurring';
 import {
@@ -17,8 +18,9 @@ import {
   getMemoFromComment,
   getTotalAsNum,
   getTransactionTags,
-  isRecurringInstance,
   isRecurringTag,
+  recurringInstanceId,
+  recurringTagFor,
 } from '../transaction-utils';
 import { CurrencyInputFormik } from './CurrencyInput';
 import {
@@ -525,14 +527,38 @@ export const EditTransaction: React.FC<{
   // it rather than from a regular transaction.
   const recurringEdit = props.initialRecurring;
   const isNew = props.operation === 'new' && !recurringEdit;
-  // A recurring instance (a transaction generated from a schedule) cannot itself
-  // be made recurring, so the recurrence control is hidden when editing one. Its
-  // recurring marker tag is preserved on save.
-  const editingInstance =
-    !recurringEdit && isRecurringInstance(props.initialState);
-  const preservedRecurringTags = editingInstance
-    ? getTransactionTags(props.initialState).filter(isRecurringTag)
-    : [];
+
+  // When editing a transaction that was generated from a schedule, look up that
+  // schedule so its settings can be edited from the same form (and so saving
+  // updates the schedule in place rather than creating a duplicate).
+  const instanceScheduleId = !recurringEdit
+    ? recurringInstanceId(props.initialState)
+    : undefined;
+  const linkedRecurring = instanceScheduleId
+    ? props.txCache.recurringTransactions.find(
+        (rt) => rt.id === instanceScheduleId,
+      )
+    : undefined;
+
+  // The schedule that pre-fills the recurrence controls: either one opened
+  // directly from the recurring list, or the one linked to the instance being
+  // edited.
+  const recurringSource = recurringEdit ?? linkedRecurring;
+
+  // The recurring marker tag that links an in-place transaction to its
+  // schedule. Reuse the linked schedule's id when there is one, otherwise mint a
+  // new id so a brand new schedule and the transaction tag agree. Held in a ref
+  // so it stays stable across renders.
+  const recurIdRef = React.useRef<string>(
+    recurringSource?.id ?? instanceScheduleId ?? makeRecurId(),
+  );
+
+  // Recurring marker tags already on the transaction, preserved when the form is
+  // saved without recurrence enabled so an instance does not silently lose its
+  // marker.
+  const preservedRecurringTags = getTransactionTags(props.initialState).filter(
+    isRecurringTag,
+  );
   const [page, setPage] = React.useState(1);
 
   // When editing a recurring transaction, present it to the rest of the form as
@@ -606,14 +632,14 @@ export const EditTransaction: React.FC<{
       : getTransactionTags(effectiveInitial).filter(
           (t) => !isRecurringTag(t),
         )[0] || '',
-    recurring: recurringEdit
+    recurring: recurringSource
       ? {
           enabled: true,
-          intervalCount: recurringEdit.intervalCount,
-          unit: recurringEdit.unit,
-          weekday: recurringEdit.weekday ?? 1,
-          dayOfMonth: recurringEdit.dayOfMonth ?? 1,
-          adjustToWorkday: recurringEdit.adjustToWorkday,
+          intervalCount: recurringSource.intervalCount,
+          unit: recurringSource.unit,
+          weekday: recurringSource.weekday ?? 1,
+          dayOfMonth: recurringSource.dayOfMonth ?? 1,
+          adjustToWorkday: recurringSource.adjustToWorkday,
         }
       : defaultRecurringValue,
     lines: isNew
@@ -718,42 +744,14 @@ export const EditTransaction: React.FC<{
             localPayee = `${from} to ${to}`;
           }
 
-          // Preserve any existing memo text in the transaction comment while
-          // applying the (possibly changed or cleared) tag. When editing a
-          // recurring instance, its recurring marker tag is preserved too.
           const memo = getMemoFromComment(effectiveInitial.value.comment);
-          const comment = formatComment(memo, [
-            ...(values.tag ? [values.tag] : []),
-            ...preservedRecurringTags,
-          ]);
+          const userTags = values.tag ? [values.tag] : [];
 
           const expenselines = values.lines.map((line) =>
             lineToEnhancedExpenseLine(line),
           );
 
-          // Build the regular-transaction string from the form values. This is
-          // not fully valid (it has no real block) but is complete enough to
-          // format to a string. It is used both when saving a one-off
-          // transaction and when turning an existing transaction into a
-          // recurring one (the transaction is kept and only a schedule is added).
-          const newTx: EnhancedTransaction = {
-            blockLine: -1,
-            block: {
-              firstLine: -1,
-              lastLine: -1,
-              block: '',
-            },
-            type: 'tx',
-            value: {
-              payee: localPayee,
-              date: values.date,
-              expenselines,
-              check: effectiveInitial.value.check,
-              comment,
-            },
-          };
-          const txStr = formatTransaction(newTx, props.currencySymbol);
-
+          // When the recurrence toggle is on, save a recurring transaction.
           if (values.recurring.enabled) {
             const period = {
               intervalCount: values.recurring.intervalCount,
@@ -761,8 +759,9 @@ export const EditTransaction: React.FC<{
               weekday: values.recurring.weekday,
               dayOfMonth: values.recurring.dayOfMonth,
             };
+            const recurId = recurIdRef.current;
             const rt: RecurringTransaction = {
-              id: recurringEdit ? recurringEdit.id : makeRecurId(),
+              id: recurId,
               intervalCount: values.recurring.intervalCount,
               unit: values.recurring.unit,
               weekday:
@@ -773,43 +772,109 @@ export const EditTransaction: React.FC<{
                 values.recurring.unit === 'month'
                   ? values.recurring.dayOfMonth
                   : undefined,
-              // When editing an existing schedule, the date entered is taken
-              // literally as the next occurrence (a one-off override); the
-              // schedule resumes on its regular anchor afterwards. Otherwise snap
-              // to the first matching occurrence of the chosen anchor.
+              // When editing directly from the recurring list the date field IS
+              // the next-occurrence date, so use it directly. For a linked
+              // instance, preserve the schedule's existing nextDate. For a brand
+              // new schedule, compute the first occurrence on or after the date.
               nextDate: recurringEdit
                 ? values.date
-                : firstOccurrenceOnOrAfter(values.date, period),
-              endDate: recurringEdit ? recurringEdit.endDate : undefined,
+                : recurringSource
+                  ? recurringSource.nextDate
+                  : firstOccurrenceOnOrAfter(values.date, period),
+              endDate: recurringSource ? recurringSource.endDate : undefined,
               adjustToWorkday: values.recurring.adjustToWorkday,
               payee: localPayee,
-              comment,
+              // The schedule comment holds the memo and user tag only; the
+              // per-instance recurring marker is added when an instance is
+              // materialized.
+              comment: formatComment(memo, userTags),
               expenselines,
-              block: recurringEdit ? recurringEdit.block : undefined,
+              block: recurringSource ? recurringSource.block : undefined,
             };
+
+            // Editing a schedule directly from the recurring list.
             if (recurringEdit) {
-              // Editing the schedule itself: just save it.
               props.updater.saveRecurring(rt).then(props.close);
-            } else if (props.operation === 'modify') {
-              // Adding recurrence to a transaction that already exists: keep that
-              // transaction (with any edits) and only create the schedule, whose
-              // next occurrence falls after the existing transaction's date. No
-              // duplicate transaction is created.
+              return;
+            }
+
+            // Enabling recurrence while editing an existing transaction: tag
+            // that transaction in place with the recurring marker and save the
+            // schedule, rather than appending a duplicate transaction.
+            if (props.operation === 'modify') {
+              const markerComment = formatComment(memo, [
+                ...userTags,
+                recurringTagFor(recurId),
+              ]);
+              const inPlaceTx: EnhancedTransaction = {
+                ...props.initialState,
+                value: {
+                  ...props.initialState.value,
+                  payee: localPayee,
+                  date: values.date.replace(/-/g, '/'),
+                  expenselines,
+                  comment: markerComment,
+                },
+              };
+              const txStr = formatTransaction(inPlaceTx, props.currencySymbol);
+
+              // For a brand new schedule, the transaction we just tagged is the
+              // occurrence for its date, so advance the schedule past it. An
+              // existing schedule keeps its own next date.
+              const scheduleToSave = linkedRecurring
+                ? rt
+                : {
+                    ...rt,
+                    nextDate:
+                      rt.nextDate === values.date
+                        ? nextNominalDate(rt)
+                        : rt.nextDate,
+                  };
               props.updater
-                .addRecurringToExisting(
+                .makeTransactionRecurring(
                   props.initialState,
                   txStr,
-                  rt,
-                  values.date,
+                  scheduleToSave,
                 )
                 .then(props.close);
-            } else {
-              // Brand new recurring transaction ("Add to ledger"): add the first
-              // transaction now and create the schedule.
-              props.updater.createRecurring(rt, values.date).then(props.close);
+              return;
             }
+
+            // A brand new (or cloned) recurring transaction: add a first
+            // occurrence immediately and save the schedule.
+            props.updater.createRecurring(rt, values.date).then(props.close);
             return;
           }
+
+          // Non-recurring save. Preserve any existing recurring marker tags so a
+          // recurring instance edited without changing its recurrence keeps its
+          // marker.
+          const comment = formatComment(memo, [
+            ...userTags,
+            ...preservedRecurringTags,
+          ]);
+
+          // This tx is not fully valid because we are not specifying a valid block.
+          // It's only complete enough that we can format it into a string.
+          const newTx: EnhancedTransaction = {
+            blockLine: -1,
+            block: {
+              firstLine: -1,
+              lastLine: -1,
+              block: '',
+            },
+            type: 'tx',
+            value: {
+              payee: localPayee,
+              // TODO: This is not a ISO8601. Once reconciliation is added, remove this and reformat file.
+              date: values.date.replace(/-/g, '/'),
+              expenselines,
+              check: effectiveInitial.value.check,
+              comment,
+            },
+          };
+
+          const txStr = formatTransaction(newTx, props.currencySymbol);
 
           switch (props.operation) {
             case 'new':
@@ -938,14 +1003,12 @@ export const EditTransaction: React.FC<{
                           allTags={props.txCache.tags}
                           onChange={(tag) => formik.setFieldValue('tag', tag)}
                         />
-                        {!editingInstance && (
-                          <RecurringSelect
-                            value={formik.values.recurring}
-                            onChange={(recurring) =>
-                              formik.setFieldValue('recurring', recurring)
-                            }
-                          />
-                        )}
+                        <RecurringSelect
+                          value={formik.values.recurring}
+                          onChange={(recurring) =>
+                            formik.setFieldValue('recurring', recurring)
+                          }
+                        />
                       </div>
                     </>
                   )}

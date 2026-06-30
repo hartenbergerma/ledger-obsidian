@@ -339,9 +339,17 @@ export const RecurringSelect: React.FC<{
   const [showHelp, setShowHelp] = React.useState(false);
   // Local draft so edits in the panel only take effect when confirmed.
   const [draft, setDraft] = React.useState<RecurringFormValue>(value);
+  // Raw text for the two number inputs so the user can clear and retype
+  // without the field snapping back to 1.
+  const [intervalText, setIntervalText] = React.useState(
+    String(value.intervalCount),
+  );
+  const [dayText, setDayText] = React.useState(String(value.dayOfMonth));
 
   React.useEffect(() => {
     setDraft(value);
+    setIntervalText(String(value.intervalCount));
+    setDayText(String(value.dayOfMonth));
   }, [value]);
 
   if (value.enabled && !open) {
@@ -390,12 +398,19 @@ export const RecurringSelect: React.FC<{
           <input
             type="number"
             min={1}
-            value={draft.intervalCount}
-            onChange={(e) =>
-              update({
-                intervalCount: Math.max(1, parseInt(e.target.value, 10) || 1),
-              })
-            }
+            value={intervalText}
+            onChange={(e) => {
+              setIntervalText(e.target.value);
+              const n = parseInt(e.target.value, 10);
+              if (!isNaN(n) && n >= 1) {
+                update({ intervalCount: n });
+              }
+            }}
+            onBlur={() => {
+              const n = Math.max(1, parseInt(intervalText, 10) || 1);
+              setIntervalText(String(n));
+              update({ intervalCount: n });
+            }}
           />
           <select
             value={draft.unit}
@@ -431,15 +446,19 @@ export const RecurringSelect: React.FC<{
               type="number"
               min={1}
               max={31}
-              value={draft.dayOfMonth}
-              onChange={(e) =>
-                update({
-                  dayOfMonth: Math.min(
-                    31,
-                    Math.max(1, parseInt(e.target.value, 10) || 1),
-                  ),
-                })
-              }
+              value={dayText}
+              onChange={(e) => {
+                setDayText(e.target.value);
+                const n = parseInt(e.target.value, 10);
+                if (!isNaN(n) && n >= 1 && n <= 31) {
+                  update({ dayOfMonth: n });
+                }
+              }}
+              onBlur={() => {
+                const n = Math.min(31, Math.max(1, parseInt(dayText, 10) || 1));
+                setDayText(String(n));
+                update({ dayOfMonth: n });
+              }}
             />
             <span>of the month</span>
           </div>

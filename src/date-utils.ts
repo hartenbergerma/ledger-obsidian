@@ -4,11 +4,10 @@ import { Moment } from 'moment';
 
 export type Interval = 'day' | 'week' | 'month';
 
-export type DateRange = 'month' | '6months' | 'year' | 'all' | 'custom';
+export type DateRange = 'month' | 'year' | 'all' | 'custom';
 
 export const dateRangeOptions: { id: DateRange; label: string }[] = [
   { id: 'month', label: 'Last Month' },
-  { id: '6months', label: 'Last 6 Months' },
   { id: 'year', label: 'Last Year' },
   { id: 'all', label: 'All Time' },
   { id: 'custom', label: 'Custom' },
@@ -34,102 +33,57 @@ export const chooseInterval = (
 /**
  * resolveDateRange converts a named date range into concrete start and end
  * dates and an automatically chosen graph resolution. The firstTxDate is used
- * as the beginning of the 'all' range. For the 'custom' range the explicit
- * customStart and customEnd dates are used (falling back to the full data
- * window when they are not provided).
+ * as the beginning of the 'all' range.
  */
 export const resolveDateRange = (
   range: DateRange,
   firstTxDate: Moment,
-  customStart?: Moment,
-  customEnd?: Moment,
 ): { startDate: Moment; endDate: Moment; interval: Interval } => {
-  const now = window.moment();
+  const endDate = window.moment();
   let startDate: Moment;
-  let endDate: Moment = now;
   switch (range) {
     case 'month':
-      startDate = now.clone().subtract(1, 'month');
-      break;
-    case '6months':
-      startDate = now.clone().subtract(6, 'months');
+      startDate = endDate.clone().subtract(1, 'month');
       break;
     case 'year':
-      startDate = now.clone().subtract(1, 'year');
+      startDate = endDate.clone().subtract(1, 'year');
       break;
     case 'all':
-      startDate = window.moment.min(firstTxDate.clone(), now);
+      startDate = window.moment.min(firstTxDate.clone(), endDate);
       break;
     case 'custom':
-      startDate = (customStart ?? firstTxDate).clone();
-      endDate = (customEnd ?? now).clone();
+      // Custom ranges are resolved externally via chooseInterval; fall back to all-time.
+      startDate = window.moment.min(firstTxDate.clone(), endDate);
       break;
   }
   return { startDate, endDate, interval: chooseInterval(startDate, endDate) };
 };
 
 /**
- * isDateRangeAvailable determines whether a named date range is worth offering
- * given the date of the oldest transaction. A "Last ..." range is only useful
- * when there is data older than the start of that range; otherwise it would
- * show exactly the same data as a shorter range or "All Time". The 'all' and
- * 'custom' ranges are always available.
- */
-export const isDateRangeAvailable = (
-  range: DateRange,
-  firstTxDate: Moment,
-  now: Moment = window.moment(),
-): boolean => {
-  let rangeStart: Moment;
-  switch (range) {
-    case 'month':
-      rangeStart = now.clone().subtract(1, 'month');
-      break;
-    case '6months':
-      rangeStart = now.clone().subtract(6, 'months');
-      break;
-    case 'year':
-      rangeStart = now.clone().subtract(1, 'year');
-      break;
-    case 'all':
-    case 'custom':
-      return true;
-  }
-  return firstTxDate.isBefore(rangeStart);
-};
-
-/**
- * availableDateRangeOptions returns the subset of dateRangeOptions which are
- * meaningful for the provided oldest transaction date. "All Time" is always
- * included.
- */
-export const availableDateRangeOptions = (
-  firstTxDate: Moment,
-  now: Moment = window.moment(),
-): { id: DateRange; label: string }[] =>
-  dateRangeOptions.filter(({ id }) =>
-    isDateRangeAvailable(id, firstTxDate, now),
-  );
-
-/**
  * makeChartLabelFormatter creates a chartist label interpolation function
- * which formats bucket names for the provided interval and skips labels when
- * there are too many buckets to remain readable.
+ * which formats bucket names (or axis tick timestamps) for the provided
+ * interval and skips labels when there are too many to remain readable.
  */
 export const makeChartLabelFormatter =
-  (interval: Interval, bucketCount: number, maxLabels = 12) =>
-  (value: string, index: number): string | null => {
-    const everyNth = Math.ceil(bucketCount / maxLabels);
+  (interval: Interval, tickCount: number, maxLabels = 12) =>
+  (value: string | number, index: number): string | null => {
+    const everyNth = Math.ceil(tickCount / maxLabels);
     if (index % everyNth !== 0) {
       return null;
     }
-    const format = interval === 'month' ? 'MMM YYYY' : 'MMM D';
+    const format = interval === 'month' ? 'MMM YY' : 'MMM D';
     return window.moment(value).format(format);
   };
 
 /**
  * makeBucketNames creates a list of dates at the provided interval between the
  * startDate and the endDate.
+ *
+ * For month and week intervals, intermediate buckets snap to calendar
+ * boundaries (1st of each month / Monday of each ISO week) so they align with
+ * the axis tick marks. Only the first bucket (startDate) and last bucket
+ * (endDate) can fall on arbitrary days. For day intervals the buckets step
+ * uniformly from the startDate.
  */
 export const makeBucketNames = (
   interval: Interval,
@@ -137,24 +91,86 @@ export const makeBucketNames = (
   endDate: Moment,
 ): string[] => {
   const names: string[] = [];
-  const currentDate = startDate.clone();
+  names.push(startDate.format('YYYY-MM-DD'));
 
-  do {
-    names.push(currentDate.format('YYYY-MM-DD'));
-    currentDate.add(1, interval);
-  } while (currentDate.isSameOrBefore(endDate));
+  if (interval === 'month') {
+    const currentDate = startDate.clone().startOf('month').add(1, 'month');
+    while (currentDate.isBefore(endDate)) {
+      names.push(currentDate.format('YYYY-MM-DD'));
+      currentDate.add(1, 'month');
+    }
+  } else if (interval === 'week') {
+    const currentDate = startDate.clone().startOf('isoWeek').add(1, 'week');
+    while (currentDate.isBefore(endDate)) {
+      names.push(currentDate.format('YYYY-MM-DD'));
+      currentDate.add(1, 'week');
+    }
+  } else {
+    const currentDate = startDate.clone().add(1, interval);
+    while (currentDate.isBefore(endDate)) {
+      names.push(currentDate.format('YYYY-MM-DD'));
+      currentDate.add(1, interval);
+    }
+  }
 
-  // Always include the end of the range as the final bucket. When the range
-  // does not divide evenly into the interval, the last generated bucket falls
-  // before the end date. Previously this caused transactions occurring after
-  // that bucket (e.g. in the most recent days) to be omitted from the chart,
-  // even though they appeared in the transaction list below.
+  // Always include the end date as the final bucket, deduplicated.
   const endName = endDate.format('YYYY-MM-DD');
   if (names[names.length - 1] !== endName) {
     names.push(endName);
   }
 
   return names;
+};
+
+/**
+ * makeAxisTicks returns the x-axis tick positions (as millisecond timestamps)
+ * for a time-based chart axis. The data points are positioned by their actual
+ * date, so the ticks are placed at meaningful calendar boundaries rather than
+ * at the data points themselves:
+ *  - month: the first of each month within the range, so a point on e.g. the
+ *    15th sits halfway between two month ticks instead of on top of one.
+ *  - week: Monday of each ISO week within the range, so off-week-start points
+ *    sit between ticks.
+ *  - day: the bucket dates themselves, which are already evenly spaced.
+ */
+export const makeAxisTicks = (
+  interval: Interval,
+  startDate: Moment,
+  endDate: Moment,
+  bucketNames: string[],
+): number[] => {
+  if (interval === 'day') {
+    return bucketNames.map((name) => window.moment(name).valueOf());
+  }
+
+  if (interval === 'week') {
+    const ticks: number[] = [];
+    const currentDate = startDate.clone().startOf('isoWeek');
+    // Skip a leading partial week so the first tick is not before the axis
+    // start. A start date that is already Monday is kept.
+    if (currentDate.isBefore(startDate)) {
+      currentDate.add(1, 'week');
+    }
+    while (currentDate.isSameOrBefore(endDate)) {
+      ticks.push(currentDate.valueOf());
+      currentDate.add(1, 'week');
+    }
+    return ticks;
+  }
+
+  // month
+  const ticks: number[] = [];
+  const currentDate = startDate.clone().startOf('month');
+  // Skip a leading partial month so the first tick is not drawn before the
+  // start of the axis. A start date that already falls on the 1st is kept.
+  if (currentDate.isBefore(startDate)) {
+    currentDate.add(1, 'month');
+  }
+  while (currentDate.isSameOrBefore(endDate)) {
+    ticks.push(currentDate.valueOf());
+    currentDate.add(1, 'month');
+  }
+  return ticks;
 };
 
 /**

@@ -10,7 +10,7 @@ window.moment = moment;
 describe('makeChartSegment()', () => {
   const buckets = ['2026-01-01', '2026-02-01', '2026-03-01'];
 
-  test('uses the previous boundary plus one day as the inclusive start', () => {
+  test('shows the complete preceding calendar month for a bucket on the 1st', () => {
     const segment = makeChartSegment(
       buckets,
       2,
@@ -19,8 +19,9 @@ describe('makeChartSegment()', () => {
       'month',
     );
     expect(segment.index).toEqual(2);
-    expect(segment.filterStart.format('YYYY-MM-DD')).toEqual('2026-02-02');
-    expect(segment.filterEnd.format('YYYY-MM-DD')).toEqual('2026-03-01');
+    // Bucket 2026-03-01 (1st of March) → show February: 2026-02-01 to 2026-02-28
+    expect(segment.filterStart.format('YYYY-MM-DD')).toEqual('2026-02-01');
+    expect(segment.filterEnd.format('YYYY-MM-DD')).toEqual('2026-02-28');
     expect(segment.value).toEqual(1234);
   });
 
@@ -32,7 +33,8 @@ describe('makeChartSegment()', () => {
       0,
       'month',
     );
-    expect(segment.label).toEqual('February (02.01.-01.02.26)');
+    // Bucket 2026-02-01 (1st of Feb) → show January: 2026-01-01 to 2026-01-31
+    expect(segment.label).toEqual('January (01.01.-31.01.26)');
   });
 
   test('formats the label using just the date for a daily interval', () => {

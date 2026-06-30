@@ -2,7 +2,12 @@ import {
   makeDailyAccountBalanceChangeMap,
   makeDailyBalanceMap,
 } from '../balance-utils';
-import { DateRange, Interval, resolveDateRange } from '../date-utils';
+import {
+  chooseInterval,
+  DateRange,
+  Interval,
+  resolveDateRange,
+} from '../date-utils';
 import { LedgerModifier } from '../file-interface';
 import type { TransactionCache } from '../parser';
 import { ISettings } from '../settings';
@@ -106,39 +111,47 @@ const useDateRange = (
 ): {
   dateRange: DateRange;
   setDateRange: (range: DateRange) => void;
+  customStartDate: Moment;
+  customEndDate: Moment;
+  setCustomDates: (start: Moment, end: Moment) => void;
   startDate: Moment;
   endDate: Moment;
   interval: Interval;
-  customStart: Moment;
-  customEnd: Moment;
-  setCustomStart: (date: Moment) => void;
-  setCustomEnd: (date: Moment) => void;
 } => {
   const [dateRange, setDateRange] = React.useState<DateRange>(initialRange);
-  // Endpoints for the 'custom' range. They default to the full data window so
-  // selecting "Custom" initially shows everything, after which the user narrows
-  // it down. They are ignored unless dateRange is 'custom'.
-  const [customStart, setCustomStart] = React.useState<Moment>(() =>
-    txCache.firstDate.clone(),
+  const [customStartDate, setCustomStartDate] = React.useState<Moment>(() =>
+    window.moment().subtract(1, 'month'),
   );
-  const [customEnd, setCustomEnd] = React.useState<Moment>(() =>
+  const [customEndDate, setCustomEndDate] = React.useState<Moment>(() =>
     window.moment(),
   );
-  const { startDate, endDate, interval } = React.useMemo(
-    () =>
-      resolveDateRange(dateRange, txCache.firstDate, customStart, customEnd),
-    [dateRange, txCache, customStart, customEnd],
-  );
+
+  const setCustomDates = React.useCallback((start: Moment, end: Moment) => {
+    setCustomStartDate(start);
+    setCustomEndDate(end);
+    setDateRange('custom');
+  }, []);
+
+  const { startDate, endDate, interval } = React.useMemo(() => {
+    if (dateRange === 'custom') {
+      return {
+        startDate: customStartDate,
+        endDate: customEndDate,
+        interval: chooseInterval(customStartDate, customEndDate),
+      };
+    }
+    return resolveDateRange(dateRange, txCache.firstDate);
+  }, [dateRange, customStartDate, customEndDate, txCache]);
+
   return {
     dateRange,
     setDateRange,
+    customStartDate,
+    customEndDate,
+    setCustomDates,
     startDate,
     endDate,
     interval,
-    customStart,
-    customEnd,
-    setCustomStart,
-    setCustomEnd,
   };
 };
 
@@ -161,13 +174,12 @@ const MobileDashboard: React.FC<{
   const {
     dateRange,
     setDateRange,
+    customStartDate,
+    customEndDate,
+    setCustomDates,
     startDate,
     endDate,
     interval,
-    customStart,
-    customEnd,
-    setCustomStart,
-    setCustomEnd,
   } = useDateRange(props.txCache, 'month');
   const [selectedAccounts, setSelectedAccounts] = React.useState<string[]>([]);
   const [accountsExpanded, setAccountsExpanded] = React.useState(false);
@@ -178,10 +190,11 @@ const MobileDashboard: React.FC<{
     React.useState<ChartSegment | null>(null);
 
   // A selected chart segment refers to a specific point/bar, so it stops being
-  // meaningful once the date range or the set of accounts changes.
+  // meaningful once the date window (including live edits to a custom range) or
+  // the set of accounts changes.
   React.useEffect(() => {
     setSelectedSegment(null);
-  }, [dateRange, selectedAccounts]);
+  }, [dateRange, startDate, endDate, selectedAccounts]);
 
   // Clear the tag filter if the selected tag no longer exists (e.g. the last
   // transaction with that tag was deleted or had its tag changed). The recurring
@@ -204,11 +217,9 @@ const MobileDashboard: React.FC<{
       <DateRangeSelector
         range={dateRange}
         setRange={setDateRange}
-        firstDate={props.txCache.firstDate}
-        customStart={customStart}
-        customEnd={customEnd}
-        setCustomStart={setCustomStart}
-        setCustomEnd={setCustomEnd}
+        customStart={customStartDate}
+        customEnd={customEndDate}
+        onCustomDatesChange={setCustomDates}
       />
 
       <button
@@ -293,13 +304,12 @@ const DesktopDashboard: React.FC<{
   const {
     dateRange,
     setDateRange,
+    customStartDate,
+    customEndDate,
+    setCustomDates,
     startDate,
     endDate,
     interval,
-    customStart,
-    customEnd,
-    setCustomStart,
-    setCustomEnd,
   } = useDateRange(props.txCache, 'month');
   const [selectedAccounts, setSelectedAccounts] = React.useState<string[]>([]);
   const [selectedTag, setSelectedTag] = React.useState<string | null>(null);
@@ -309,10 +319,11 @@ const DesktopDashboard: React.FC<{
     React.useState<ChartSegment | null>(null);
 
   // A selected chart segment refers to a specific point/bar, so it stops being
-  // meaningful once the date range or the set of accounts changes.
+  // meaningful once the date window (including live edits to a custom range) or
+  // the set of accounts changes.
   React.useEffect(() => {
     setSelectedSegment(null);
-  }, [dateRange, selectedAccounts]);
+  }, [dateRange, startDate, endDate, selectedAccounts]);
 
   // Clear the tag filter if the selected tag no longer exists (e.g. the last
   // transaction with that tag was deleted or had its tag changed). The recurring
@@ -336,11 +347,9 @@ const DesktopDashboard: React.FC<{
         <DateRangeSelector
           range={dateRange}
           setRange={setDateRange}
-          firstDate={props.txCache.firstDate}
-          customStart={customStart}
-          customEnd={customEnd}
-          setCustomStart={setCustomStart}
-          setCustomEnd={setCustomEnd}
+          customStart={customStartDate}
+          customEnd={customEndDate}
+          onCustomDatesChange={setCustomDates}
         />
         {props.tutorialIndex !== -1 ? (
           <Tutorial

@@ -22,6 +22,10 @@ export class LedgerView extends TextFileView {
     this.currentFilePath = null;
     this.updateInterface = null;
 
+    this.addAction('ledger', 'Add to Ledger', () => {
+      this.updateInterface?.openExpenseModal('new');
+    });
+
     this.addAction('pencil', 'Switch to Markdown View', () => {
       const state = leaf.view.getState();
       leaf.setViewState(

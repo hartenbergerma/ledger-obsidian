@@ -4,7 +4,7 @@ import { Moment } from 'moment';
 
 export type ChartData = {
   x: string | number | Date;
-  y: number;
+  y: number | null;
 }[];
 
 /**
@@ -32,12 +32,10 @@ export const makeNetWorthData = (
 ): ChartData =>
   bucketNames.map((bucket) => {
     const balanceData = dailyAccountBalanceMap.get(bucket);
-    const netWorth = balanceData
-      ? calcNetWorth(balanceData, netWorthAccounts)
-      : 0;
     return {
       x: bucket,
-      y: netWorth,
+      // null produces a gap in the line chart for dates before recorded data.
+      y: balanceData ? calcNetWorth(balanceData, netWorthAccounts) : null,
     };
   });
 
@@ -54,12 +52,15 @@ export const makeBalanceData = (
   const accounts = [...findChildAccounts(account, allAccounts), account];
   return bucketNames.map((bucket) => {
     const accountBalances = dailyAccountBalanceMap.get(bucket);
+    // null produces a gap for dates before any data was recorded.
+    if (!accountBalances) {
+      return { x: bucket, y: null };
+    }
     const balance = accounts.reduce(
       (prev, currentAccount) =>
-        (accountBalances?.get(currentAccount) || 0) + prev,
+        (accountBalances.get(currentAccount) || 0) + prev,
       0,
     );
-
     return { x: bucket, y: balance };
   });
 };
@@ -80,6 +81,11 @@ export const makeDeltaData = (
     const prevBucket = i === 0 ? bucketBefore : bucketNames[i - 1];
     const accountBalances = dailyAccountBalanceMap.get(bucket);
     const prevAccountBalances = dailyAccountBalanceMap.get(prevBucket);
+
+    // Both buckets before any data → gap in the chart.
+    if (!accountBalances && !prevAccountBalances) {
+      return { x: bucket, y: null };
+    }
 
     const balance = accounts.reduce((prev, currentAccount) => {
       const b1 = prevAccountBalances?.get(currentAccount) || 0;
