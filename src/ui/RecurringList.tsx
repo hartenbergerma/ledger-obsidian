@@ -247,10 +247,10 @@ const RecurringAverage: React.FC<{
 
   const parts: string[] = [];
   if (expenses !== 0) {
-    parts.push(`${format(expenses)}/month expenses`);
+    parts.push(`${format(expenses)}/month recurring expenses`);
   }
   if (income !== 0) {
-    parts.push(`${format(income)}/month income`);
+    parts.push(`${format(income)}/month recurring income`);
   }
   if (parts.length === 0) {
     return null;
