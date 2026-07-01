@@ -1,6 +1,7 @@
 import { LedgerModifier } from '../file-interface';
 import type { EnhancedExpenseLine, TransactionCache } from '../parser';
 import {
+  averageMonthlyRecurringAmount,
   effectiveDueDate,
   isDue,
   materializeTransaction,
@@ -116,6 +117,12 @@ const RecurringStyles = styled.div`
   .ledger-recurring-accept.is-due {
     box-shadow: 0 0 0 2px var(--interactive-accent);
   }
+
+  .ledger-recurring-average {
+    margin: 8px 0 0;
+    color: var(--text-muted);
+    font-size: 0.85em;
+  }
 `;
 
 const MobileRecurringStyles = styled.div`
@@ -191,6 +198,12 @@ const MobileRecurringStyles = styled.div`
     padding: 0 7px;
     font-size: 0.75em;
   }
+
+  .ledger-recurring-average {
+    margin: 12px 0 0;
+    color: var(--text-muted);
+    font-size: 0.85em;
+  }
 `;
 
 interface RecurringRow {
@@ -202,6 +215,31 @@ interface RecurringRow {
   to: string;
   summary: string;
 }
+
+/**
+ * RecurringAverage renders a short summary of the average monthly cost of all
+ * recurring transactions, e.g. "Ø $1500/month across recurring transactions".
+ * Renders nothing when the average rounds to zero.
+ */
+const RecurringAverage: React.FC<{
+  txCache: TransactionCache;
+  settings: ISettings;
+}> = ({ txCache, settings }): JSX.Element | null => {
+  const average = React.useMemo(
+    () => averageMonthlyRecurringAmount(txCache.recurringTransactions),
+    [txCache.recurringTransactions],
+  );
+  const rounded = Math.round(average);
+  if (rounded === 0) {
+    return null;
+  }
+  return (
+    <p className="ledger-recurring-average">
+      Ø {settings.currencySymbol}
+      {rounded.toLocaleString()}/month across recurring transactions
+    </p>
+  );
+};
 
 const useRecurringRows = (
   txCache: TransactionCache,
@@ -315,6 +353,7 @@ export const RecurringList: React.FC<{
           ))}
         </tbody>
       </table>
+      <RecurringAverage txCache={props.txCache} settings={props.settings} />
     </RecurringStyles>
   );
 };
@@ -388,6 +427,7 @@ export const MobileRecurringList: React.FC<{
           </div>
         </div>
       ))}
+      <RecurringAverage txCache={props.txCache} settings={props.settings} />
     </MobileRecurringStyles>
   );
 };

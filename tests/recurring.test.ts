@@ -1,6 +1,7 @@
 import { EnhancedExpenseLine, parse } from '../src/parser';
 import {
   advanceSchedule,
+  averageMonthlyRecurringAmount,
   effectiveDueDate,
   firstOccurrenceOnOrAfter,
   formatPeriodExpression,
@@ -10,6 +11,7 @@ import {
   isRecurringBlock,
   isRecurringInstance,
   materializeTransaction,
+  monthlyOccurrenceRate,
   nextNominalDate,
   RecurringTransaction,
   schedulePatternChanged,
@@ -215,6 +217,59 @@ describe('schedule math', () => {
     const advanced = advanceSchedule(monthlyRent);
     expect(advanced.nextDate).toBe('2026-08-15');
     expect(monthlyRent.nextDate).toBe('2026-07-15'); // unchanged
+  });
+});
+
+describe('monthly averaging', () => {
+  const weeklyRent: RecurringTransaction = {
+    ...monthlyRent,
+    unit: 'week',
+    weekday: 1,
+    dayOfMonth: undefined,
+  };
+
+  test('monthlyOccurrenceRate weights schedules onto a monthly figure', () => {
+    // Monthly on the 15th → once a month.
+    expect(monthlyOccurrenceRate(monthlyRent)).toBe(1);
+    // Every 4 months → a quarter of a month.
+    expect(monthlyOccurrenceRate({ ...monthlyRent, intervalCount: 4 })).toBe(
+      0.25,
+    );
+    // Weekly → 4.5 per month.
+    expect(monthlyOccurrenceRate(weeklyRent)).toBe(4.5);
+    // Bi-weekly → 2.25 per month.
+    expect(monthlyOccurrenceRate({ ...weeklyRent, intervalCount: 2 })).toBe(
+      2.25,
+    );
+  });
+
+  test('averageMonthlyRecurringAmount sums weighted amounts', () => {
+    // Single monthly rent of 1500 → 1500 per month.
+    expect(averageMonthlyRecurringAmount([monthlyRent])).toBeCloseTo(1500);
+
+    // Add an every-4-months 400 expense → 1500 + 400 * 0.25 = 1600.
+    const quarterly: RecurringTransaction = {
+      ...monthlyRent,
+      id: 'quart',
+      intervalCount: 4,
+      expenselines: [
+        line('Expenses:Insurance', 400, '$'),
+        line('Assets:Checking', -400, '$'),
+      ],
+    };
+    expect(
+      averageMonthlyRecurringAmount([monthlyRent, quarterly]),
+    ).toBeCloseTo(1600);
+  });
+
+  test('averageMonthlyRecurringAmount ignores schedules past their end date', () => {
+    const ended: RecurringTransaction = {
+      ...monthlyRent,
+      id: 'ended',
+      nextDate: '2026-07-15',
+      endDate: '2026-06-01',
+    };
+    expect(averageMonthlyRecurringAmount([ended])).toBe(0);
   });
 });
 

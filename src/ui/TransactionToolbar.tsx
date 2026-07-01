@@ -1,5 +1,5 @@
 import { TagFilter } from './Tag';
-import { Platform } from 'obsidian';
+import { Platform, setIcon } from 'obsidian';
 import React from 'react';
 import styled from 'styled-components';
 
@@ -30,19 +30,28 @@ const ToolbarStyle = styled.div`
   gap: 8px;
   margin: 4px 0 12px;
 
-  /* The search control sits on the left. Collapsed it is just an icon button;
-     expanded it becomes a search bar. */
-  .ledger-search {
-    flex: 0 0 auto;
-    order: 1;
-  }
-
-  .ledger-search-button {
+  /* Round icon buttons, shared by the search and add controls. */
+  .ledger-icon-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
     margin: 0;
-    padding: 6px 10px;
+    border-radius: 50%;
+  }
+
+  .ledger-icon-button svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* The search control sits on the left. Collapsed it is just a round icon
+     button; expanded it becomes a search bar. */
+  .ledger-search {
+    flex: 0 0 auto;
+    order: 1;
   }
 
   .ledger-search-bar {
@@ -90,8 +99,9 @@ const ToolbarStyle = styled.div`
     color: var(--text-normal);
   }
 
-  /* The tag filter takes the middle and grows to fill the row. min-width:0 lets
-     it shrink so the add button stays on the row. */
+  /* The tag filter (only shown while the search is open) takes the middle and
+     grows to fill the row. min-width:0 lets it shrink so the add button stays on
+     the row. */
   .ledger-toolbar-tags {
     flex: 1 1 auto;
     min-width: 0;
@@ -108,8 +118,13 @@ const ToolbarStyle = styled.div`
   .ledger-toolbar-add {
     flex: 0 0 auto;
     order: 3;
-    margin: 0;
     margin-left: auto;
+  }
+
+  /* Larger, easier touch targets for the round buttons on mobile. */
+  &.ledger-toolbar-mobile .ledger-icon-button {
+    width: 40px;
+    height: 40px;
   }
 
   /* Expanded search: on desktop it is a fixed-ish width search bar so the tag
@@ -141,10 +156,11 @@ const ToolbarStyle = styled.div`
 
 const SearchControl: React.FC<{
   open: boolean;
-  setOpen: (open: boolean) => void;
+  onOpen: () => void;
+  onClose: () => void;
   value: string;
   onChange: (value: string) => void;
-}> = ({ open, setOpen, value, onChange }): JSX.Element => {
+}> = ({ open, onOpen, onClose, value, onChange }): JSX.Element => {
   const inputRef = React.useRef<HTMLInputElement | null>(null);
 
   React.useEffect(() => {
@@ -158,10 +174,10 @@ const SearchControl: React.FC<{
       <div className="ledger-search">
         <button
           type="button"
-          className="ledger-search-button"
-          onClick={() => setOpen(true)}
-          title="Search transactions"
-          aria-label="Search transactions"
+          className="ledger-search-button ledger-icon-button"
+          onClick={onOpen}
+          title="Search and filter transactions"
+          aria-label="Search and filter transactions"
         >
           <SearchIcon size={18} />
         </button>
@@ -183,8 +199,7 @@ const SearchControl: React.FC<{
           onKeyDown={(e) => {
             if (e.key === 'Escape') {
               e.preventDefault();
-              onChange('');
-              setOpen(false);
+              onClose();
             }
           }}
         />
@@ -193,10 +208,7 @@ const SearchControl: React.FC<{
           className="ledger-search-clear"
           aria-label="Close search"
           title="Close search"
-          onClick={() => {
-            onChange('');
-            setOpen(false);
-          }}
+          onClick={onClose}
         >
           ×
         </button>
@@ -206,10 +218,38 @@ const SearchControl: React.FC<{
 };
 
 /**
- * TransactionToolbar renders the controls above a transaction list: a search
- * control on the left, the tag filter in the middle, and an "Add to Ledger"
- * button pinned to the right. The search prioritizes the Payee and the memos of
- * each transaction.
+ * AddButton renders a round button that opens the "Add to Ledger" form. It uses
+ * the same "ledger" icon as the ribbon button in the Obsidian sidebar.
+ */
+const AddButton: React.FC<{ onClick: () => void }> = ({
+  onClick,
+}): JSX.Element => {
+  const ref = React.useRef<HTMLButtonElement | null>(null);
+
+  React.useEffect(() => {
+    if (ref.current) {
+      setIcon(ref.current, 'ledger');
+    }
+  }, []);
+
+  return (
+    <button
+      ref={ref}
+      type="button"
+      className="ledger-toolbar-add ledger-icon-button mod-cta"
+      onClick={onClick}
+      title="Add to Ledger"
+      aria-label="Add to Ledger"
+    />
+  );
+};
+
+/**
+ * TransactionToolbar renders the controls above a transaction list: a round
+ * search/filter button on the left and a round "Add to Ledger" button on the
+ * right. Clicking the search button reveals a search bar (searching the Payee
+ * and memos) together with the tag filter; closing it clears the search query
+ * and resets the tag selection.
  */
 export const TransactionToolbar: React.FC<{
   allTags: string[];
@@ -219,9 +259,16 @@ export const TransactionToolbar: React.FC<{
   onSearchChange: (value: string) => void;
   onAdd: () => void;
 }> = (props): JSX.Element => {
-  // Keep the search bar open whenever there is an active query (e.g. after a
-  // re-render) so the field does not collapse out from under the user.
-  const [open, setOpen] = React.useState(props.search !== '');
+  const [open, setOpen] = React.useState(false);
+
+  const handleClose = (): void => {
+    setOpen(false);
+    props.onSearchChange('');
+    // Reset the tag filter when the search/filter panel is closed.
+    if (props.selectedTag) {
+      props.onToggleTag(props.selectedTag);
+    }
+  };
 
   const className = [
     'ledger-tx-toolbar',
@@ -235,24 +282,21 @@ export const TransactionToolbar: React.FC<{
     <ToolbarStyle className={className}>
       <SearchControl
         open={open}
-        setOpen={setOpen}
+        onOpen={() => setOpen(true)}
+        onClose={handleClose}
         value={props.search}
         onChange={props.onSearchChange}
       />
-      <div className="ledger-toolbar-tags">
-        <TagFilter
-          allTags={props.allTags}
-          selectedTag={props.selectedTag}
-          onToggleTag={props.onToggleTag}
-        />
-      </div>
-      <button
-        type="button"
-        className="ledger-toolbar-add mod-cta"
-        onClick={props.onAdd}
-      >
-        Add to Ledger
-      </button>
+      {open ? (
+        <div className="ledger-toolbar-tags">
+          <TagFilter
+            allTags={props.allTags}
+            selectedTag={props.selectedTag}
+            onToggleTag={props.onToggleTag}
+          />
+        </div>
+      ) : null}
+      <AddButton onClick={props.onAdd} />
     </ToolbarStyle>
   );
 };

@@ -14,6 +14,7 @@ import {
   formatExpenseLines,
   getMemoFromComment,
   getTagsFromComment,
+  getTotalAsNum,
   recurringTagFor,
 } from './transaction-utils';
 import { Grammar, Parser } from 'nearley';
@@ -259,6 +260,39 @@ export const isDue = (
 export const advanceSchedule = (
   rt: RecurringTransaction,
 ): RecurringTransaction => ({ ...rt, nextDate: nextNominalDate(rt) });
+
+// A month is approximated as 4.5 weeks (i.e. ~54 weeks per year) when averaging
+// weekly schedules onto a monthly figure, so a bi-weekly schedule counts as
+// 4.5 / 2 = 2.25 occurrences per month.
+const WEEKS_PER_MONTH = 4.5;
+
+/**
+ * monthlyOccurrenceRate returns how many times, on average, a recurring
+ * transaction occurs per month. A monthly schedule with interval N is 1/N per
+ * month (so every 4 months is 0.25); a weekly schedule with interval N is
+ * 4.5/N per month (so bi-weekly is 2.25).
+ */
+export const monthlyOccurrenceRate = (rt: RecurringTransaction): number =>
+  rt.unit === 'week'
+    ? WEEKS_PER_MONTH / rt.intervalCount
+    : 1 / rt.intervalCount;
+
+/**
+ * averageMonthlyRecurringAmount returns the sum, across all provided recurring
+ * transactions, of each transaction's amount weighted by how often it occurs per
+ * month. Schedules whose end date has already passed are excluded. The result is
+ * an average monthly cost of the recurring transactions.
+ */
+export const averageMonthlyRecurringAmount = (
+  rts: RecurringTransaction[],
+): number =>
+  rts.reduce((sum, rt) => {
+    if (rt.endDate && rt.nextDate > rt.endDate) {
+      return sum;
+    }
+    const amount = getTotalAsNum(materializeTransaction(rt, rt.nextDate));
+    return sum + monthlyOccurrenceRate(rt) * amount;
+  }, 0);
 
 /**
  * materializeTransaction builds the concrete transaction for an occurrence of a
