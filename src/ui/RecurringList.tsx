@@ -1,7 +1,7 @@
 import { LedgerModifier } from '../file-interface';
 import type { EnhancedExpenseLine, TransactionCache } from '../parser';
 import {
-  averageMonthlyRecurringAmount,
+  averageMonthlyRecurringTotals,
   effectiveDueDate,
   isDue,
   materializeTransaction,
@@ -217,27 +217,47 @@ interface RecurringRow {
 }
 
 /**
- * RecurringAverage renders a short summary of the average monthly cost of all
- * recurring transactions, e.g. "Ø $1500/month across recurring transactions".
- * Renders nothing when the average rounds to zero.
+ * RecurringAverage renders a short summary of the average monthly recurring
+ * expenses and income, e.g. "Ø $1500/month expenses · $3000/month income".
+ * Expenses and income are classified by the account prefixes in the plugin
+ * settings. Renders nothing when both averages round to zero.
  */
 const RecurringAverage: React.FC<{
   txCache: TransactionCache;
   settings: ISettings;
 }> = ({ txCache, settings }): JSX.Element | null => {
-  const average = React.useMemo(
-    () => averageMonthlyRecurringAmount(txCache.recurringTransactions),
-    [txCache.recurringTransactions],
+  const totals = React.useMemo(
+    () =>
+      averageMonthlyRecurringTotals(
+        txCache.recurringTransactions,
+        settings.incomeAccountsPrefix,
+        settings.expenseAccountsPrefix,
+      ),
+    [
+      txCache.recurringTransactions,
+      settings.incomeAccountsPrefix,
+      settings.expenseAccountsPrefix,
+    ],
   );
-  const rounded = Math.round(average);
-  if (rounded === 0) {
+
+  const expenses = Math.round(totals.expenses);
+  const income = Math.round(totals.income);
+  const format = (value: number): string =>
+    `${settings.currencySymbol}${value.toLocaleString()}`;
+
+  const parts: string[] = [];
+  if (expenses !== 0) {
+    parts.push(`${format(expenses)}/month expenses`);
+  }
+  if (income !== 0) {
+    parts.push(`${format(income)}/month income`);
+  }
+  if (parts.length === 0) {
     return null;
   }
+
   return (
-    <p className="ledger-recurring-average">
-      Ø {settings.currencySymbol}
-      {rounded.toLocaleString()}/month across recurring transactions
-    </p>
+    <p className="ledger-recurring-average">Ø {parts.join(' · ')}</p>
   );
 };
 

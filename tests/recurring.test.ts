@@ -1,7 +1,7 @@
 import { EnhancedExpenseLine, parse } from '../src/parser';
 import {
   advanceSchedule,
-  averageMonthlyRecurringAmount,
+  averageMonthlyRecurringTotals,
   effectiveDueDate,
   firstOccurrenceOnOrAfter,
   formatPeriodExpression,
@@ -243,11 +243,20 @@ describe('monthly averaging', () => {
     ).toBeCloseTo(2.174, 3);
   });
 
-  test('averageMonthlyRecurringAmount sums weighted amounts', () => {
-    // Single monthly rent of 1500 → 1500 per month.
-    expect(averageMonthlyRecurringAmount([monthlyRent])).toBeCloseTo(1500);
+  // Monthly salary income: posts to an Income account.
+  const monthlySalary: RecurringTransaction = {
+    ...monthlyRent,
+    id: 'salary',
+    payee: 'Salary',
+    expenselines: [
+      line('Assets:Checking', 3000, '$'),
+      line('Income:Salary', -3000, '$'),
+    ],
+  };
 
-    // Add an every-4-months 400 expense → 1500 + 400 * 0.25 = 1600.
+  test('averageMonthlyRecurringTotals splits expenses and income by prefix', () => {
+    // Rent (monthly, 1500 expense) plus an every-4-months 400 expense →
+    // 1500 + 400 * 0.25 = 1600 expenses; salary → 3000 income.
     const quarterly: RecurringTransaction = {
       ...monthlyRent,
       id: 'quart',
@@ -257,19 +266,41 @@ describe('monthly averaging', () => {
         line('Assets:Checking', -400, '$'),
       ],
     };
-    expect(
-      averageMonthlyRecurringAmount([monthlyRent, quarterly]),
-    ).toBeCloseTo(1600);
+    const totals = averageMonthlyRecurringTotals(
+      [monthlyRent, quarterly, monthlySalary],
+      'Income',
+      'Expenses',
+    );
+    expect(totals.expenses).toBeCloseTo(1600);
+    expect(totals.income).toBeCloseTo(3000);
   });
 
-  test('averageMonthlyRecurringAmount ignores schedules past their end date', () => {
+  test('averageMonthlyRecurringTotals ignores schedules past their end date', () => {
     const ended: RecurringTransaction = {
       ...monthlyRent,
       id: 'ended',
       nextDate: '2026-07-15',
       endDate: '2026-06-01',
     };
-    expect(averageMonthlyRecurringAmount([ended])).toBe(0);
+    const totals = averageMonthlyRecurringTotals([ended], 'Income', 'Expenses');
+    expect(totals).toEqual({ expenses: 0, income: 0 });
+  });
+
+  test('averageMonthlyRecurringTotals excludes transfers between assets', () => {
+    const transfer: RecurringTransaction = {
+      ...monthlyRent,
+      id: 'transfer',
+      expenselines: [
+        line('Assets:Savings', 500, '$'),
+        line('Assets:Checking', -500, '$'),
+      ],
+    };
+    const totals = averageMonthlyRecurringTotals(
+      [transfer],
+      'Income',
+      'Expenses',
+    );
+    expect(totals).toEqual({ expenses: 0, income: 0 });
   });
 });
 
