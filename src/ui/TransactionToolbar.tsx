@@ -47,11 +47,14 @@ const ToolbarStyle = styled.div`
     height: 18px;
   }
 
-  /* The search control sits on the left. Collapsed it is just a round icon
-     button; expanded it becomes a search bar. */
+  /* On desktop the add button sits on the far left, immediately followed by the
+     search control; the tag filter follows. On mobile this is overridden below
+     so the search sits on the left and the add button is pinned to the right.
+     Collapsed the search is just a round icon button; expanded it becomes a
+     search bar. */
   .ledger-search {
     flex: 0 0 auto;
-    order: 1;
+    order: 2;
   }
 
   .ledger-search-bar {
@@ -105,7 +108,7 @@ const ToolbarStyle = styled.div`
   .ledger-toolbar-tags {
     flex: 1 1 auto;
     min-width: 0;
-    order: 2;
+    order: 3;
   }
 
   /* The tag filter supplies its own outer margin when standalone; inside the
@@ -114,9 +117,26 @@ const ToolbarStyle = styled.div`
     margin: 0;
   }
 
-  /* The "Add to Ledger" button is pinned to the right of the row. */
+  /* On desktop, tighten the space between the search field and the tag filter
+     (the flex gap is otherwise a little wide there). */
+  &:not(.ledger-toolbar-mobile) .ledger-toolbar-tags {
+    margin-left: -4px;
+  }
+
+  /* On desktop the add button leads the row, directly left of the search
+     control. */
   .ledger-toolbar-add {
     flex: 0 0 auto;
+    order: 1;
+    margin: 0;
+  }
+
+  /* Mobile: restore the search-on-the-left / add-on-the-right arrangement. */
+  &.ledger-toolbar-mobile .ledger-search {
+    order: 1;
+  }
+
+  &.ledger-toolbar-mobile .ledger-toolbar-add {
     order: 3;
     margin-left: auto;
   }

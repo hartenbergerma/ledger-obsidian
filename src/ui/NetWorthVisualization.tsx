@@ -24,6 +24,18 @@ import styled from 'styled-components';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
+/**
+ * Heading places the "Net Worth" title and its "Assets minus liabilities"
+ * description on the same line. The description keeps its regular (non-heading)
+ * text size and is baseline-aligned with the title.
+ */
+const Heading = styled.div`
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+`;
+
 const Chart = styled.div`
   .ct-label {
     color: var(--text-muted);
@@ -203,8 +215,10 @@ export const NetWorthVisualization: React.FC<{
 
   return (
     <>
-      <h2>Net Worth</h2>
-      <i>Assets minus liabilities</i>
+      <Heading>
+        <h2>Net Worth</h2>
+        <i>Assets minus liabilities</i>
+      </Heading>
 
       <Chart>
         <ChartistGraph
