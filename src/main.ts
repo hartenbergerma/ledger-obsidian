@@ -37,6 +37,10 @@ export default class LedgerPlugin extends Plugin {
   // plugins are initialized.
   private txCacheSubscriptions: ((txCache: TransactionCache) => void)[];
 
+  // A MutationObserver kept so the "ledger" badge survives the file explorer's
+  // virtualized re-rendering (items are added/removed as the list scrolls).
+  private fileExplorerObserver: MutationObserver | null = null;
+
   public async onload(): Promise<void> {
     console.log('ledger: Loading plugin v' + this.manifest.version);
 
@@ -63,6 +67,27 @@ export default class LedgerPlugin extends Plugin {
         if (file.path === this.settings.ledgerFile) {
           this.updateTransactionCache();
         }
+      }),
+    );
+
+    // Show the dashboard only for the configured ledger file, regardless of its
+    // extension. When that file is opened in a Markdown view, swap the leaf to
+    // the Ledger dashboard view. Switching back to raw Markdown (via the view's
+    // pencil action) keeps the same file open, so this event does not refire and
+    // the user is free to view the file as text.
+    this.registerEvent(
+      this.app.workspace.on('file-open', (file) => {
+        this.maybeShowDashboard(file);
+        this.decorateFileExplorer();
+      }),
+    );
+
+    // The file explorer is re-decorated on layout changes (e.g. files added,
+    // renamed, or the explorer re-rendering) so the "ledger" badge stays on the
+    // configured file only.
+    this.registerEvent(
+      this.app.workspace.on('layout-change', () => {
+        this.decorateFileExplorer();
       }),
     );
 
@@ -143,8 +168,27 @@ export default class LedgerPlugin extends Plugin {
 
     this.app.workspace.onLayoutReady(() => {
       this.updateTransactionCache();
+      this.setupFileExplorerObserver();
+      this.decorateFileExplorer();
     });
   }
+
+  public onunload(): void {
+    this.fileExplorerObserver?.disconnect();
+    this.fileExplorerObserver = null;
+  }
+
+  /**
+   * refreshLedgerFile is called when the configured ledger file path changes
+   * (e.g. from the settings tab). It reparses the new file and updates the file
+   * explorer decoration.
+   */
+  public readonly refreshLedgerFile = (): void => {
+    this.updateTransactionCache().catch((e) =>
+      console.error('ledger: failed to update the transaction cache', e),
+    );
+    this.decorateFileExplorer();
+  };
 
   /**
    * registerTxCacheSubscriptions takes a function which will be called any time
@@ -273,5 +317,92 @@ ${window.moment().format('YYYY-MM-DD')} Starting Balances
     // by passing the correct data here.
     const ledgerFile = await this.createLedgerFileIfMissing();
     new LedgerModifier(this, ledgerFile).openExpenseModal('new');
+  };
+
+  /**
+   * maybeShowDashboard switches the active leaf to the Ledger dashboard view
+   * when it is showing the configured ledger file as Markdown. Other files (and
+   * other view types) are left untouched.
+   */
+  private readonly maybeShowDashboard = (file: TFile | null): void => {
+    if (!file || file.path !== this.settings.ledgerFile) {
+      return;
+    }
+    const leaf = this.app.workspace.activeLeaf;
+    if (!leaf || leaf.view.getViewType() !== 'markdown') {
+      return;
+    }
+    const state = leaf.view.getState();
+    if (state?.file !== file.path) {
+      return;
+    }
+    leaf.setViewState({
+      type: LedgerViewType,
+      state: { file: file.path },
+      popstate: true,
+    } as ViewState);
+  };
+
+  private readonly setupFileExplorerObserver = (): void => {
+    try {
+      const container = document.querySelector('.nav-files-container');
+      if (!container || this.fileExplorerObserver) {
+        return;
+      }
+      let scheduled = false;
+      this.fileExplorerObserver = new MutationObserver(() => {
+        if (scheduled) {
+          return;
+        }
+        scheduled = true;
+        window.requestAnimationFrame(() => {
+          scheduled = false;
+          this.decorateFileExplorer();
+        });
+      });
+      this.fileExplorerObserver.observe(container, {
+        childList: true,
+        subtree: true,
+      });
+    } catch (e) {
+      console.error('ledger: failed to observe the file explorer', e);
+    }
+  };
+
+  /**
+   * decorateFileExplorer marks the configured ledger file in the file explorer
+   * with a "ledger" badge and hides the native extension tag from any other file
+   * that merely uses the .ledger extension, so the badge identifies only the
+   * configured file (independent of its extension).
+   */
+  private readonly decorateFileExplorer = (): void => {
+    try {
+      const configured = this.settings.ledgerFile;
+      document.querySelectorAll('.nav-file-title').forEach((el) => {
+        const path = el.getAttribute('data-path');
+        const isConfigured = path === configured;
+        el.toggleClass('ledger-configured-file', isConfigured);
+
+        const tag = el.querySelector<HTMLElement>('.nav-file-tag');
+        if (!tag) {
+          return;
+        }
+        if (isConfigured) {
+          // Hide any native extension tag so our single CSS "ledger" badge is
+          // the only label, whatever the file's extension is.
+          tag.style.display = 'none';
+        } else if (tag.textContent?.trim().toLowerCase() === 'ledger') {
+          // Another file that merely uses the .ledger extension: do not label it
+          // as a ledger file.
+          tag.style.display = 'none';
+        } else {
+          // Restore a tag we may have hidden previously (e.g. the configured
+          // file changed).
+          tag.style.display = '';
+        }
+      });
+    } catch (e) {
+      console.error('ledger: failed to decorate the file explorer', e);
+    }
   };
 }

@@ -1,6 +1,7 @@
 import { LedgerModifier } from '../file-interface';
 import type { EnhancedExpenseLine, TransactionCache } from '../parser';
 import {
+  averageMonthlyRecurringTotals,
   effectiveDueDate,
   isDue,
   materializeTransaction,
@@ -116,6 +117,12 @@ const RecurringStyles = styled.div`
   .ledger-recurring-accept.is-due {
     box-shadow: 0 0 0 2px var(--interactive-accent);
   }
+
+  .ledger-recurring-average {
+    margin: 8px 0 0;
+    color: var(--text-muted);
+    font-size: 0.85em;
+  }
 `;
 
 const MobileRecurringStyles = styled.div`
@@ -191,6 +198,12 @@ const MobileRecurringStyles = styled.div`
     padding: 0 7px;
     font-size: 0.75em;
   }
+
+  .ledger-recurring-average {
+    margin: 12px 0 0;
+    color: var(--text-muted);
+    font-size: 0.85em;
+  }
 `;
 
 interface RecurringRow {
@@ -202,6 +215,51 @@ interface RecurringRow {
   to: string;
   summary: string;
 }
+
+/**
+ * RecurringAverage renders a short summary of the average monthly recurring
+ * expenses and income, e.g. "Ø $1500/month expenses · $3000/month income".
+ * Expenses and income are classified by the account prefixes in the plugin
+ * settings. Renders nothing when both averages round to zero.
+ */
+const RecurringAverage: React.FC<{
+  txCache: TransactionCache;
+  settings: ISettings;
+}> = ({ txCache, settings }): JSX.Element | null => {
+  const totals = React.useMemo(
+    () =>
+      averageMonthlyRecurringTotals(
+        txCache.recurringTransactions,
+        settings.incomeAccountsPrefix,
+        settings.expenseAccountsPrefix,
+      ),
+    [
+      txCache.recurringTransactions,
+      settings.incomeAccountsPrefix,
+      settings.expenseAccountsPrefix,
+    ],
+  );
+
+  const expenses = Math.round(totals.expenses);
+  const income = Math.round(totals.income);
+  const format = (value: number): string =>
+    `${settings.currencySymbol}${value.toLocaleString()}`;
+
+  const parts: string[] = [];
+  if (expenses !== 0) {
+    parts.push(`${format(expenses)}/month recurring expenses`);
+  }
+  if (income !== 0) {
+    parts.push(`${format(income)}/month recurring income`);
+  }
+  if (parts.length === 0) {
+    return null;
+  }
+
+  return (
+    <p className="ledger-recurring-average">Ø {parts.join(' · ')}</p>
+  );
+};
 
 const useRecurringRows = (
   txCache: TransactionCache,
@@ -315,6 +373,7 @@ export const RecurringList: React.FC<{
           ))}
         </tbody>
       </table>
+      <RecurringAverage txCache={props.txCache} settings={props.settings} />
     </RecurringStyles>
   );
 };
@@ -388,6 +447,7 @@ export const MobileRecurringList: React.FC<{
           </div>
         </div>
       ))}
+      <RecurringAverage txCache={props.txCache} settings={props.settings} />
     </MobileRecurringStyles>
   );
 };

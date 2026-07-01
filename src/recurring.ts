@@ -14,6 +14,7 @@ import {
   formatExpenseLines,
   getMemoFromComment,
   getTagsFromComment,
+  getTotalAsNum,
   recurringTagFor,
 } from './transaction-utils';
 import { Grammar, Parser } from 'nearley';
@@ -124,6 +125,36 @@ interface ParsedPeriod {
   dayOfMonth?: number;
 }
 
+/**
+ * SchedulePattern captures just the recurrence pattern fields that determine
+ * when a schedule's occurrences land (its rhythm), independent of the schedule's
+ * current next-date state, payee or postings.
+ */
+export interface SchedulePattern {
+  intervalCount: number;
+  unit: 'week' | 'month';
+  weekday?: number;
+  dayOfMonth?: number;
+}
+
+/**
+ * schedulePatternChanged returns true when two schedule patterns differ in a way
+ * that moves the occurrences: a different interval, unit, or the relevant anchor
+ * (weekday for weekly schedules, day-of-month for monthly ones). It is used to
+ * decide whether editing a recurrence should recompute the schedule's next date.
+ */
+export const schedulePatternChanged = (
+  a: SchedulePattern,
+  b: SchedulePattern,
+): boolean => {
+  if (a.intervalCount !== b.intervalCount || a.unit !== b.unit) {
+    return true;
+  }
+  return b.unit === 'week'
+    ? (a.weekday ?? 1) !== (b.weekday ?? 1)
+    : (a.dayOfMonth ?? 1) !== (b.dayOfMonth ?? 1);
+};
+
 // --- Schedule math ---------------------------------------------------------
 
 /**
@@ -229,6 +260,87 @@ export const isDue = (
 export const advanceSchedule = (
   rt: RecurringTransaction,
 ): RecurringTransaction => ({ ...rt, nextDate: nextNominalDate(rt) });
+
+// The average number of weeks in a month, using the mean calendar year of
+// 365.25 days: 365.25 / 7 / 12 ≈ 4.348 weeks per month. Used to average weekly
+// schedules onto a monthly figure.
+const WEEKS_PER_MONTH = 365.25 / 7 / 12;
+
+/**
+ * monthlyOccurrenceRate returns how many times, on average, a recurring
+ * transaction occurs per month. A monthly schedule with interval N is 1/N per
+ * month (so every 4 months is 0.25); a weekly schedule with interval N is
+ * ~4.348/N per month (so bi-weekly is ~2.174).
+ */
+export const monthlyOccurrenceRate = (rt: RecurringTransaction): number =>
+  rt.unit === 'week'
+    ? WEEKS_PER_MONTH / rt.intervalCount
+    : 1 / rt.intervalCount;
+
+const startsWithPrefix = (account: string, prefix: string): boolean =>
+  prefix !== '' && (account === prefix || account.startsWith(`${prefix}:`));
+
+/**
+ * recurringTransactionKind classifies a recurring transaction as income or an
+ * expense based on the account prefixes configured in the plugin settings. A
+ * transaction that posts to an income account is treated as income; one that
+ * posts to an expense account is treated as an expense. Anything else (e.g. a
+ * transfer between asset accounts) is 'other' and excluded from the averages.
+ */
+export const recurringTransactionKind = (
+  rt: RecurringTransaction,
+  incomePrefix: string,
+  expensePrefix: string,
+): 'income' | 'expense' | 'other' => {
+  const accounts = rt.expenselines
+    .filter((line): line is EnhancedExpenseLine => 'account' in line)
+    .map((line) => line.dealiasedAccount);
+  if (accounts.some((a) => startsWithPrefix(a, incomePrefix))) {
+    return 'income';
+  }
+  if (accounts.some((a) => startsWithPrefix(a, expensePrefix))) {
+    return 'expense';
+  }
+  return 'other';
+};
+
+export interface MonthlyRecurringTotals {
+  /** Average monthly total of the recurring expenses. */
+  expenses: number;
+  /** Average monthly total of the recurring income. */
+  income: number;
+}
+
+/**
+ * averageMonthlyRecurringTotals returns the average monthly expense and income
+ * totals across all provided recurring transactions. Each transaction's amount
+ * is weighted by how often it occurs per month (see monthlyOccurrenceRate) and
+ * bucketed into expenses or income by its account type (see
+ * recurringTransactionKind). Schedules whose end date has already passed are
+ * excluded.
+ */
+export const averageMonthlyRecurringTotals = (
+  rts: RecurringTransaction[],
+  incomePrefix: string,
+  expensePrefix: string,
+): MonthlyRecurringTotals =>
+  rts.reduce<MonthlyRecurringTotals>(
+    (totals, rt) => {
+      if (rt.endDate && rt.nextDate > rt.endDate) {
+        return totals;
+      }
+      const kind = recurringTransactionKind(rt, incomePrefix, expensePrefix);
+      if (kind === 'other') {
+        return totals;
+      }
+      const amount = getTotalAsNum(materializeTransaction(rt, rt.nextDate));
+      const monthly = monthlyOccurrenceRate(rt) * amount;
+      return kind === 'income'
+        ? { ...totals, income: totals.income + monthly }
+        : { ...totals, expenses: totals.expenses + monthly };
+    },
+    { expenses: 0, income: 0 },
+  );
 
 /**
  * materializeTransaction builds the concrete transaction for an occurrence of a

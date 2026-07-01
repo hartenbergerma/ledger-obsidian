@@ -1,6 +1,7 @@
 import { EnhancedExpenseLine, parse } from '../src/parser';
 import {
   advanceSchedule,
+  averageMonthlyRecurringTotals,
   effectiveDueDate,
   firstOccurrenceOnOrAfter,
   formatPeriodExpression,
@@ -10,8 +11,10 @@ import {
   isRecurringBlock,
   isRecurringInstance,
   materializeTransaction,
+  monthlyOccurrenceRate,
   nextNominalDate,
   RecurringTransaction,
+  schedulePatternChanged,
 } from '../src/recurring';
 import { settingsWithDefaults } from '../src/settings';
 import * as moment from 'moment';
@@ -134,10 +137,170 @@ describe('schedule math', () => {
     expect(nextNominalDate(monthly)).toBe('2026-07-15');
   });
 
+  test('schedulePatternChanged detects pattern-affecting edits', () => {
+    // Same pattern, only the next date differs: not a pattern change.
+    expect(
+      schedulePatternChanged(monthlyRent, {
+        intervalCount: 1,
+        unit: 'month',
+        dayOfMonth: 15,
+      }),
+    ).toBe(false);
+    // Moving the day of the month is a pattern change.
+    expect(
+      schedulePatternChanged(monthlyRent, {
+        intervalCount: 1,
+        unit: 'month',
+        dayOfMonth: 20,
+      }),
+    ).toBe(true);
+    // Changing the interval is a pattern change.
+    expect(
+      schedulePatternChanged(monthlyRent, {
+        intervalCount: 2,
+        unit: 'month',
+        dayOfMonth: 15,
+      }),
+    ).toBe(true);
+    // Switching units is a pattern change; the weekday anchor is then compared.
+    expect(
+      schedulePatternChanged(monthlyRent, {
+        intervalCount: 1,
+        unit: 'week',
+        weekday: 1,
+      }),
+    ).toBe(true);
+    const weekly: RecurringTransaction = {
+      ...monthlyRent,
+      unit: 'week',
+      weekday: 1,
+      dayOfMonth: undefined,
+    };
+    expect(
+      schedulePatternChanged(weekly, {
+        intervalCount: 1,
+        unit: 'week',
+        weekday: 1,
+      }),
+    ).toBe(false);
+    expect(
+      schedulePatternChanged(weekly, {
+        intervalCount: 1,
+        unit: 'week',
+        weekday: 4,
+      }),
+    ).toBe(true);
+  });
+
+  test('editing a monthly schedule recomputes the next date onto the new anchor', () => {
+    // Mirrors how the edit form recomputes the next date when the schedule (but
+    // not the date field) is changed: the next occurrence snaps to the new
+    // day-of-month on or after the previous next date.
+    expect(
+      firstOccurrenceOnOrAfter(monthlyRent.nextDate, {
+        intervalCount: 1,
+        unit: 'month',
+        dayOfMonth: 20,
+      }),
+    ).toBe('2026-07-20');
+    // Moving to an earlier day-of-month rolls to the following month.
+    expect(
+      firstOccurrenceOnOrAfter(monthlyRent.nextDate, {
+        intervalCount: 1,
+        unit: 'month',
+        dayOfMonth: 10,
+      }),
+    ).toBe('2026-08-10');
+  });
+
   test('advanceSchedule returns a copy with the next date', () => {
     const advanced = advanceSchedule(monthlyRent);
     expect(advanced.nextDate).toBe('2026-08-15');
     expect(monthlyRent.nextDate).toBe('2026-07-15'); // unchanged
+  });
+});
+
+describe('monthly averaging', () => {
+  const weeklyRent: RecurringTransaction = {
+    ...monthlyRent,
+    unit: 'week',
+    weekday: 1,
+    dayOfMonth: undefined,
+  };
+
+  test('monthlyOccurrenceRate weights schedules onto a monthly figure', () => {
+    // Monthly on the 15th → once a month.
+    expect(monthlyOccurrenceRate(monthlyRent)).toBe(1);
+    // Every 4 months → a quarter of a month.
+    expect(monthlyOccurrenceRate({ ...monthlyRent, intervalCount: 4 })).toBe(
+      0.25,
+    );
+    // Weekly → 365.25 / 7 / 12 ≈ 4.348 per month.
+    expect(monthlyOccurrenceRate(weeklyRent)).toBeCloseTo(4.348, 3);
+    // Bi-weekly → half of that ≈ 2.174 per month.
+    expect(
+      monthlyOccurrenceRate({ ...weeklyRent, intervalCount: 2 }),
+    ).toBeCloseTo(2.174, 3);
+  });
+
+  // Monthly salary income: posts to an Income account.
+  const monthlySalary: RecurringTransaction = {
+    ...monthlyRent,
+    id: 'salary',
+    payee: 'Salary',
+    expenselines: [
+      line('Assets:Checking', 3000, '$'),
+      line('Income:Salary', -3000, '$'),
+    ],
+  };
+
+  test('averageMonthlyRecurringTotals splits expenses and income by prefix', () => {
+    // Rent (monthly, 1500 expense) plus an every-4-months 400 expense →
+    // 1500 + 400 * 0.25 = 1600 expenses; salary → 3000 income.
+    const quarterly: RecurringTransaction = {
+      ...monthlyRent,
+      id: 'quart',
+      intervalCount: 4,
+      expenselines: [
+        line('Expenses:Insurance', 400, '$'),
+        line('Assets:Checking', -400, '$'),
+      ],
+    };
+    const totals = averageMonthlyRecurringTotals(
+      [monthlyRent, quarterly, monthlySalary],
+      'Income',
+      'Expenses',
+    );
+    expect(totals.expenses).toBeCloseTo(1600);
+    expect(totals.income).toBeCloseTo(3000);
+  });
+
+  test('averageMonthlyRecurringTotals ignores schedules past their end date', () => {
+    const ended: RecurringTransaction = {
+      ...monthlyRent,
+      id: 'ended',
+      nextDate: '2026-07-15',
+      endDate: '2026-06-01',
+    };
+    const totals = averageMonthlyRecurringTotals([ended], 'Income', 'Expenses');
+    expect(totals).toEqual({ expenses: 0, income: 0 });
+  });
+
+  test('averageMonthlyRecurringTotals excludes transfers between assets', () => {
+    const transfer: RecurringTransaction = {
+      ...monthlyRent,
+      id: 'transfer',
+      expenselines: [
+        line('Assets:Savings', 500, '$'),
+        line('Assets:Checking', -500, '$'),
+      ],
+    };
+    const totals = averageMonthlyRecurringTotals(
+      [transfer],
+      'Income',
+      'Expenses',
+    );
+    expect(totals).toEqual({ expenses: 0, income: 0 });
   });
 });
 
