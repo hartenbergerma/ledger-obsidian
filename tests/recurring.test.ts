@@ -235,12 +235,12 @@ describe('monthly averaging', () => {
     expect(monthlyOccurrenceRate({ ...monthlyRent, intervalCount: 4 })).toBe(
       0.25,
     );
-    // Weekly → 4.5 per month.
-    expect(monthlyOccurrenceRate(weeklyRent)).toBe(4.5);
-    // Bi-weekly → 2.25 per month.
-    expect(monthlyOccurrenceRate({ ...weeklyRent, intervalCount: 2 })).toBe(
-      2.25,
-    );
+    // Weekly → 365.25 / 7 / 12 ≈ 4.348 per month.
+    expect(monthlyOccurrenceRate(weeklyRent)).toBeCloseTo(4.348, 3);
+    // Bi-weekly → half of that ≈ 2.174 per month.
+    expect(
+      monthlyOccurrenceRate({ ...weeklyRent, intervalCount: 2 }),
+    ).toBeCloseTo(2.174, 3);
   });
 
   test('averageMonthlyRecurringAmount sums weighted amounts', () => {
